@@ -1,7 +1,7 @@
-package ies.belgrano.almacen.controller;
+package ar.edu.ies.almacen.controller;
 
-import ies.belgrano.almacen.model.Producto;
-import ies.belgrano.almacen.service.ProductoService;
+import ar.edu.ies.almacen.entity.Producto;
+import ar.edu.ies.almacen.service.ProductoService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 

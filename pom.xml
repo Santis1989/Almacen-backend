@@ -8,7 +8,7 @@
 		<version>4.1.1</version>
 		<relativePath/> <!-- lookup parent from repository -->
 	</parent>
-	<groupId>ies.belgrano</groupId>
+	<groupId>ar.edu.ies.almacen</groupId>
 	<artifactId>almacen</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
 	<name/>
