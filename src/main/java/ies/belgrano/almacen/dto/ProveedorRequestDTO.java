@@ -1,4 +1,4 @@
-package ar.edu.ies.almacen.dto;
+package ies.belgrano.almacen.dto;
 
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;

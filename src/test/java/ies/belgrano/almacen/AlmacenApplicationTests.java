@@ -1,4 +1,4 @@
-package ar.edu.ies.almacen;
+package ies.belgrano.almacen;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;

@@ -1,6 +1,6 @@
-package ar.edu.ies.almacen.dto;
+package ies.belgrano.almacen.dto;
 
-import ar.edu.ies.almacen.entity.Proveedor;
+import ies.belgrano.almacen.model.Proveedor;
 
 public class ProveedorResponseDTO {
 

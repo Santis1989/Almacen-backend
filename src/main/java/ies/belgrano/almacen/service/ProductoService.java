@@ -1,7 +1,7 @@
-package ar.edu.ies.almacen.service;
+package ies.belgrano.almacen.service;
 
-import ar.edu.ies.almacen.entity.Producto;
-import ar.edu.ies.almacen.repository.ProductoRepository;
+import ies.belgrano.almacen.model.Producto;
+import ies.belgrano.almacen.repository.ProductoRepository;
 import org.springframework.stereotype.Service;
 
 import java.util.List;

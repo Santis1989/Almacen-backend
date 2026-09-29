@@ -1,4 +1,4 @@
-package ar.edu.ies.almacen.exception;
+package ies.belgrano.almacen.exception;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 

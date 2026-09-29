@@ -1,6 +1,6 @@
-package ar.edu.ies.almacen.repository;
+package ies.belgrano.almacen.repository;
 
-import ar.edu.ies.almacen.entity.Proveedor;
+import ies.belgrano.almacen.model.Proveedor;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 

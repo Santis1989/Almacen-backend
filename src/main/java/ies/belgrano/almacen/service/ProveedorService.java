@@ -1,11 +1,11 @@
-package ar.edu.ies.almacen.service;
+package ies.belgrano.almacen.service;
 
-import ar.edu.ies.almacen.dto.ProveedorRequestDTO;
-import ar.edu.ies.almacen.dto.ProveedorResponseDTO;
-import ar.edu.ies.almacen.entity.Proveedor;
-import ar.edu.ies.almacen.exception.ConflictException;
-import ar.edu.ies.almacen.exception.ResourceNotFoundException;
-import ar.edu.ies.almacen.repository.ProveedorRepository;
+import ies.belgrano.almacen.dto.ProveedorRequestDTO;
+import ies.belgrano.almacen.dto.ProveedorResponseDTO;
+import ies.belgrano.almacen.exception.ConflictException;
+import ies.belgrano.almacen.exception.ResourceNotFoundException;
+import ies.belgrano.almacen.model.Proveedor;
+import ies.belgrano.almacen.repository.ProveedorRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 

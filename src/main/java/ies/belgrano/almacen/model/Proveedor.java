@@ -1,4 +1,4 @@
-package ar.edu.ies.almacen.entity;
+package ies.belgrano.almacen.model;
 
 import jakarta.persistence.*;
 

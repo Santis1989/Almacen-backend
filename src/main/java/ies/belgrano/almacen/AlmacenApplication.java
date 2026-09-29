@@ -1,4 +1,4 @@
-package ar.edu.ies.almacen;
+package ies.belgrano.almacen;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;

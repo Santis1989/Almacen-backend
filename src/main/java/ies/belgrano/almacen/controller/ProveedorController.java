@@ -1,8 +1,8 @@
-package ar.edu.ies.almacen.controller;
+package ies.belgrano.almacen.controller;
 
-import ar.edu.ies.almacen.dto.ProveedorRequestDTO;
-import ar.edu.ies.almacen.dto.ProveedorResponseDTO;
-import ar.edu.ies.almacen.service.ProveedorService;
+import ies.belgrano.almacen.dto.ProveedorRequestDTO;
+import ies.belgrano.almacen.dto.ProveedorResponseDTO;
+import ies.belgrano.almacen.service.ProveedorService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
