@@ -1,8 +1,11 @@
 package ies.belgrano.almacen.service;
 
 import ies.belgrano.almacen.model.DetalleVenta;
+import ies.belgrano.almacen.model.Cliente;
 import ies.belgrano.almacen.model.Producto;
 import ies.belgrano.almacen.model.Venta;
+import ies.belgrano.almacen.exception.ResourceNotFoundException;
+import ies.belgrano.almacen.repository.ClienteRepository;
 import ies.belgrano.almacen.repository.DetalleVentaRepository;
 import ies.belgrano.almacen.repository.ProductoRepository;
 import ies.belgrano.almacen.repository.VentaRepository;
@@ -19,16 +22,19 @@ public class VentaService {
     private final VentaRepository ventaRepository;
     private final DetalleVentaRepository detalleVentaRepository;
     private final ProductoRepository productoRepository;
+    private final ClienteRepository clienteRepository;
 
 
     public VentaService(
             VentaRepository ventaRepository,
             DetalleVentaRepository detalleVentaRepository,
-            ProductoRepository productoRepository
+            ProductoRepository productoRepository,
+            ClienteRepository clienteRepository
     ) {
         this.ventaRepository = ventaRepository;
         this.detalleVentaRepository = detalleVentaRepository;
         this.productoRepository = productoRepository;
+        this.clienteRepository = clienteRepository;
     }
 
 
@@ -58,7 +64,7 @@ public class VentaService {
 
     public List<DetalleVenta> listarDetalles(Integer idVenta) {
 
-        return detalleVentaRepository.findByIdVenta(idVenta);
+        return detalleVentaRepository.findByVenta_IdVenta(idVenta);
     }
 
 
@@ -76,22 +82,22 @@ public class VentaService {
         // 1. GUARDAR LA VENTA
         // ----------------------------------------------
 
-        Venta ventaGuardada =
-                ventaRepository.save(venta);
+        if (venta.getCliente() != null) {
+            Integer idCliente = venta.getCliente().getIdCliente();
+            Cliente cliente = clienteRepository.findById(idCliente)
+                    .orElseThrow(() -> new ResourceNotFoundException(
+                            "Cliente no encontrado: " + idCliente
+                    ));
+            venta.setCliente(cliente);
+        }
 
-        Integer idVenta =
-                ventaGuardada.getIdVenta();
-
+        Venta ventaGuardada = ventaRepository.save(venta);
 
         // ----------------------------------------------
         // 2. RECORRER LOS DETALLES
         // ----------------------------------------------
 
         for (DetalleVenta detalle : detalles) {
-
-            // Asignar el ID de la venta
-            detalle.setIdVenta(idVenta);
-
 
             // ------------------------------------------
             // 3. BUSCAR EL PRODUCTO
@@ -101,7 +107,7 @@ public class VentaService {
                     productoRepository
                             .findById(detalle.getIdProducto())
                             .orElseThrow(() ->
-                                    new RuntimeException(
+                                    new ResourceNotFoundException(
                                             "Producto no encontrado: "
                                                     + detalle.getIdProducto()
                                     )
@@ -131,6 +137,9 @@ public class VentaService {
                     detalle.getCantidad()
                             .multiply(detalle.getPrecio())
             );
+
+            detalle.setVenta(ventaGuardada);
+            detalle.setProducto(producto);
 
 
             // ------------------------------------------
