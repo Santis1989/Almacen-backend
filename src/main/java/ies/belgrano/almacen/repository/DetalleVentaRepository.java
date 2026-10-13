@@ -8,5 +8,5 @@ import java.util.List;
 public interface DetalleVentaRepository
         extends JpaRepository<DetalleVenta, Integer> {
 
-    List<DetalleVenta> findByIdVenta(Integer idVenta);
+    List<DetalleVenta> findByVenta_IdVenta(Integer idVenta);
 }

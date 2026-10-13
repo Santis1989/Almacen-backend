@@ -1,6 +1,10 @@
 package ies.belgrano.almacen.model;
 
 import jakarta.persistence.*;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Table(name = "clientes")
@@ -25,6 +29,10 @@ public class Cliente {
 
     @Column(name = "direccion")
     private String direccion;
+
+    @JsonIgnore
+    @OneToMany(mappedBy = "cliente")
+    private List<Venta> ventas = new ArrayList<>();
 
     public Cliente() {
     }
@@ -75,5 +83,13 @@ public class Cliente {
 
     public void setDireccion(String direccion) {
         this.direccion = direccion;
+    }
+
+    public List<Venta> getVentas() {
+        return ventas;
+    }
+
+    public void setVentas(List<Venta> ventas) {
+        this.ventas = ventas;
     }
 }

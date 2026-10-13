@@ -1,6 +1,9 @@
 package ies.belgrano.almacen.model;
 
 import jakarta.persistence.*;
+import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Table(name = "productos")
@@ -17,17 +20,20 @@ public class Producto {
     @Column(name = "descripcion")
     private String descripcion;
 
-    @Column(name = "precio_compra")
-    private Double precioCompra;
+    @Column(name = "precio_compra", precision = 12, scale = 2)
+    private BigDecimal precioCompra;
 
-    @Column(name = "precio_venta")
-    private Double precioVenta;
+    @Column(name = "precio_venta", precision = 12, scale = 2)
+    private BigDecimal precioVenta;
 
     @Column(name = "stock")
     private Double stock;
 
     @Column(name = "stock_minimo")
     private Integer stockMinimo;
+
+    @OneToMany(mappedBy = "producto")
+    private List<DetalleVenta> detallesVenta = new ArrayList<>();
 
     public Producto() {
     }
@@ -56,19 +62,19 @@ public class Producto {
         this.descripcion = descripcion;
     }
 
-    public Double getPrecioCompra() {
+    public BigDecimal getPrecioCompra() {
         return precioCompra;
     }
 
-    public void setPrecioCompra(Double precioCompra) {
+    public void setPrecioCompra(BigDecimal precioCompra) {
         this.precioCompra = precioCompra;
     }
 
-    public Double getPrecioVenta() {
+    public BigDecimal getPrecioVenta() {
         return precioVenta;
     }
 
-    public void setPrecioVenta(Double precioVenta) {
+    public void setPrecioVenta(BigDecimal precioVenta) {
         this.precioVenta = precioVenta;
     }
 
@@ -86,5 +92,13 @@ public class Producto {
 
     public void setStockMinimo(Integer stockMinimo) {
         this.stockMinimo = stockMinimo;
+    }
+
+    public List<DetalleVenta> getDetallesVenta() {
+        return detallesVenta;
+    }
+
+    public void setDetallesVenta(List<DetalleVenta> detallesVenta) {
+        this.detallesVenta = detallesVenta;
     }
 }
