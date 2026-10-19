@@ -15,7 +15,7 @@ public class ClienteRequest {
     private String apellido;
 
     @NotBlank(message = "El DNI es obligatorio")
-    @Pattern(regexp = "\\d+", message = "El DNI debe contener solo números")
+    @Pattern(regexp = "^\\d{7,15}$", message = "El DNI debe contener entre 7 y 15 dígitos numéricos")
     private String dni;
 
     @NotBlank(message = "El teléfono es obligatorio")

@@ -8,4 +8,8 @@ import java.util.Optional;
 public interface ClienteRepository extends JpaRepository<Cliente, Integer> {
 
     Optional<Cliente> findByDni(String dni);
+
+    boolean existsByDni(String dni);
+
+    boolean existsByDniAndIdClienteNot(String dni, Integer idCliente);
 }

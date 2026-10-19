@@ -15,19 +15,19 @@ public class Cliente {
     @Column(name = "id_cliente")
     private Integer idCliente;
 
-    @Column(name = "nombre")
+    @Column(name = "nombre", nullable = false, length = 100)
     private String nombre;
 
-    @Column(name = "apellido")
+    @Column(name = "apellido", nullable = false, length = 100)
     private String apellido;
 
-    @Column(name = "dni")
+    @Column(name = "dni", nullable = false, unique = true, length = 20)
     private String dni;
 
-    @Column(name = "telefono")
+    @Column(name = "telefono", nullable = false, length = 50)
     private String telefono;
 
-    @Column(name = "direccion")
+    @Column(name = "direccion", length = 255)
     private String direccion;
 
     @JsonIgnore
