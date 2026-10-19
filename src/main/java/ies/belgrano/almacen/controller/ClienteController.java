@@ -4,14 +4,12 @@ import ies.belgrano.almacen.dto.ClienteRequest;
 import ies.belgrano.almacen.dto.ClienteResponse;
 import ies.belgrano.almacen.service.ClienteService;
 import jakarta.validation.Valid;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
-import java.util.HashMap;
+import java.net.URI;
 import java.util.List;
-import java.util.Map;
 
 @RestController
 @RequestMapping("/api/clientes")
@@ -26,36 +24,31 @@ public class ClienteController {
     // LISTAR TODOS LOS CLIENTES
     @GetMapping
     public ResponseEntity<List<ClienteResponse>> listarTodos() {
-
         return ResponseEntity.ok(clienteService.listarTodos());
     }
 
     // BUSCAR CLIENTE POR ID
     @GetMapping("/{id}")
-    public ResponseEntity<ClienteResponse> buscarPorId(
-            @PathVariable Integer id) {
-
+    public ResponseEntity<ClienteResponse> buscarPorId(@PathVariable Integer id) {
         return ResponseEntity.ok(clienteService.buscarPorId(id));
     }
 
     // BUSCAR CLIENTE POR DNI
     @GetMapping("/dni/{dni}")
-    public ResponseEntity<ClienteResponse> buscarPorDni(
-            @PathVariable String dni) {
-
+    public ResponseEntity<ClienteResponse> buscarPorDni(@PathVariable String dni) {
         return ResponseEntity.ok(clienteService.buscarPorDni(dni));
     }
 
     // CREAR CLIENTE
     @PostMapping
-    public ResponseEntity<ClienteResponse> crear(
-            @Valid @RequestBody ClienteRequest request) {
-
+    public ResponseEntity<ClienteResponse> crear(@Valid @RequestBody ClienteRequest request) {
         ClienteResponse clienteCreado = clienteService.guardar(request);
+        URI location = ServletUriComponentsBuilder.fromCurrentRequest()
+                .path("/{id}")
+                .buildAndExpand(clienteCreado.getIdCliente())
+                .toUri();
 
-        return ResponseEntity
-                .status(HttpStatus.CREATED)
-                .body(clienteCreado);
+        return ResponseEntity.created(location).body(clienteCreado);
     }
 
     // ACTUALIZAR CLIENTE
@@ -63,33 +56,13 @@ public class ClienteController {
     public ResponseEntity<ClienteResponse> actualizar(
             @PathVariable Integer id,
             @Valid @RequestBody ClienteRequest request) {
-
-        return ResponseEntity.ok(
-                clienteService.actualizar(id, request));
+        return ResponseEntity.ok(clienteService.actualizar(id, request));
     }
 
     // ELIMINAR CLIENTE
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> eliminar(
-            @PathVariable Integer id) {
-
+    public ResponseEntity<Void> eliminar(@PathVariable Integer id) {
         clienteService.eliminar(id);
-
         return ResponseEntity.noContent().build();
-    }
-
-    // MANEJAR ERRORES DE CLIENTES
-    @ExceptionHandler(ResponseStatusException.class)
-    public ResponseEntity<Map<String, Object>> manejarError(
-            ResponseStatusException ex) {
-
-        Map<String, Object> respuesta = new HashMap<>();
-
-        respuesta.put("status", ex.getStatusCode().value());
-        respuesta.put("message", ex.getReason());
-
-        return ResponseEntity
-                .status(ex.getStatusCode())
-                .body(respuesta);
     }
 }
