@@ -225,3 +225,306 @@ siguen pendientes de confirmación.
 - Pruebas HTTP de los endpoints: pendientes.
 - Verificación de restricciones MySQL: pendiente.
 ```
+
+
+---
+
+# API REST - Módulo de Ventas
+
+## 1. Descripción general
+
+El módulo Ventas permite registrar y consultar ventas
+realizadas en el sistema de almacén.
+
+Cada venta puede incluir uno o varios productos y
+puede estar asociada a un cliente o realizarse sin
+cliente registrado.
+
+El backend se encarga de:
+
+- Validar los productos y sus cantidades.
+- Comprobar el stock disponible.
+- Obtener los precios desde la base de datos.
+- Calcular subtotal, descuento y total.
+- Descontar el stock de los productos vendidos.
+- Guardar la venta y sus detalles.
+- Revertir los cambios si ocurre un error.
+
+## 2. Ruta base
+
+`/api/ventas`
+
+La API recibe y devuelve datos en formato JSON.
+
+## 3. DTO de entrada: VentaRequest
+
+Campos:
+
+| Campo | Tipo | Obligatorio | Descripción |
+|---|---|---|---|
+| idCliente | Integer | No | ID del cliente asociado. Puede ser null. |
+| porcentajeDescuento | BigDecimal | No | Descuento entre 0 y 100. Si no se envía, se utiliza 0. |
+| detalles | List | Sí | Lista de productos. Debe contener al menos un detalle. |
+
+Cada elemento de `detalles` utiliza
+`DetalleVentaRequest`.
+
+### DetalleVentaRequest
+
+| Campo | Tipo | Obligatorio | Descripción |
+|---|---|---|---|
+| idProducto | Integer | Sí | ID del producto. |
+| cantidad | BigDecimal | Sí | Cantidad solicitada, mayor que cero. |
+
+Los precios y los importes no se reciben desde el
+cliente: se calculan en el servidor.
+
+## 4. Registrar una venta
+
+**POST** `/api/ventas`
+
+Encabezado:
+
+`Content-Type: application/json`
+
+### Ejemplo de solicitud
+
+```json
+{
+  "idCliente": null,
+  "porcentajeDescuento": 10,
+  "detalles": [
+    {
+      "idProducto": 1,
+      "cantidad": 2
+    },
+    {
+      "idProducto": 2,
+      "cantidad": 3
+    }
+  ]
+}
+```
+
+El ejemplo supone que los productos 1 y 2 existen
+y tienen stock suficiente.
+
+### Respuesta exitosa
+
+**201 Created**
+
+Ejemplo ilustrativo, suponiendo que el producto 1
+cuesta $1800 y el producto 2 cuesta $1200:
+
+```json
+{
+  "idVenta": 1,
+  "fecha": "2026-10-22T20:00:00",
+  "idCliente": null,
+  "subtotal": 7200.00,
+  "porcentajeDescuento": 10.00,
+  "montoDescuento": 720.00,
+  "total": 6480.00,
+  "detalles": [
+    {
+      "idDetalle": 1,
+      "idProducto": 1,
+      "nombreProducto": "Arroz 1kg",
+      "cantidad": 2,
+      "precio": 1800.00,
+      "subtotal": 3600.00
+    },
+    {
+      "idDetalle": 2,
+      "idProducto": 2,
+      "nombreProducto": "Azucar 1kg",
+      "cantidad": 3,
+      "precio": 1200.00,
+      "subtotal": 3600.00
+    }
+  ]
+}
+```
+
+Los identificadores y la fecha son generados
+por el sistema y pueden variar.
+
+### Respuestas de error
+
+- 400 Bad Request: datos inválidos, lista vacía,
+  cantidad menor o igual a cero o descuento fuera
+  del rango permitido.
+- 404 Not Found: producto o cliente inexistente.
+- 409 Conflict: stock insuficiente.
+
+## 5. Listar ventas
+
+**GET** `/api/ventas`
+
+### Respuesta
+
+**200 OK**
+
+Devuelve una lista de objetos `VentaResponse`.
+
+Si no existen ventas, devuelve una lista vacía.
+
+Cada venta incluye sus datos generales y sus detalles.
+
+## 6. Buscar venta por ID
+
+**GET** `/api/ventas/{id}`
+
+Parámetro:
+
+- id: identificador de la venta.
+
+### Respuestas
+
+- 200 OK: devuelve la venta solicitada.
+- 404 Not Found: la venta no existe.
+
+## 7. Consultar detalles de una venta
+
+**GET** `/api/ventas/{id}/detalles`
+
+### Respuestas
+
+- 200 OK: devuelve los detalles asociados.
+- 404 Not Found: la venta no existe.
+
+Ejemplo de respuesta:
+
+```json
+[
+  {
+    "idDetalle": 1,
+    "idProducto": 1,
+    "nombreProducto": "Arroz 1kg",
+    "cantidad": 2,
+    "precio": 1800.00,
+    "subtotal": 3600.00
+  }
+]
+```
+
+## 8. Reglas de cálculo
+
+Los cálculos monetarios se realizan utilizando
+`BigDecimal`.
+
+### Subtotal de cada detalle
+
+cantidad * precioVenta
+
+El resultado se redondea a dos decimales
+utilizando `RoundingMode.HALF_UP`.
+
+### Subtotal de la venta
+
+Suma de los subtotales de todos los detalles.
+
+### Monto de descuento
+
+subtotalVenta * porcentajeDescuento / 100
+
+Se redondea a dos decimales con HALF_UP.
+
+### Total final
+
+total = subtotalVenta - montoDescuento
+
+Se expresa con dos decimales utilizando HALF_UP.
+
+El porcentaje de descuento debe estar entre
+0 y 100, inclusive.
+
+Si no se proporciona un descuento, se utiliza 0.
+
+## 9. Validaciones
+
+Antes de completar el registro, el sistema verifica:
+
+- Que la venta tenga al menos un detalle.
+- Que cada detalle indique un producto.
+- Que la cantidad sea mayor que cero.
+- Que el producto exista.
+- Que exista stock suficiente.
+- Que el precio de venta sea válido.
+- Que el cliente exista, si se indicó uno.
+- Que el descuento esté entre 0 y 100.
+
+Si alguna validación falla, la venta no debe
+registrarse parcialmente.
+
+## 10. Transacciones y stock
+
+El método de registro utiliza `@Transactional`.
+
+Dentro de la transacción se realizan las operaciones
+necesarias para registrar la venta y actualizar
+el stock.
+
+Si ocurre una excepción que provoca rollback,
+se revierten las modificaciones realizadas.
+
+Se verificó mediante pruebas de integración que:
+
+- Una venta exitosa guarda la venta y sus detalles.
+- El stock se actualiza correctamente.
+- Una venta con stock insuficiente no se registra.
+- Si falla el segundo producto, se revierte el
+  descuento de stock del primero.
+- Si el mismo producto aparece repetido y la
+  cantidad acumulada supera el stock, se rechaza
+  la operación y se conserva el stock original.
+
+### Limitación conocida
+
+No se ha implementado ni verificado todavía
+un mecanismo específico para impedir conflictos
+entre ventas simultáneas.
+
+Esta mejora queda pendiente.
+
+## 11. Estado de verificación
+
+### Pruebas manuales realizadas con Postman
+
+- POST exitoso: 201 Created.
+- Producto inexistente: 404 Not Found.
+- Cliente inexistente: 404 Not Found.
+- Stock insuficiente: 409 Conflict.
+- Cantidad cero: 400 Bad Request.
+- Lista de detalles vacía: 400 Bad Request.
+- Consultas GET de ventas y detalles realizadas.
+
+### Pruebas automatizadas
+
+`VentaServiceTest`
+
+- 7 pruebas unitarias aprobadas.
+
+`VentaIntegracionTest`
+
+- 3 pruebas de integración aprobadas.
+- Base de datos H2 en memoria.
+- Sin modificar los datos de MySQL.
+
+`AlmacenApplicationTests`
+
+- 2 pruebas aprobadas.
+- Verificada la conexión a H2.
+
+### Estado actual
+
+Las pruebas mencionadas se ejecutaron
+correctamente por separado.
+
+Queda pendiente ejecutar la suite completa
+del proyecto mediante:
+
+`.\mvnw.cmd clean test`
+
+También queda pendiente preparar el commit
+y el Pull Request correspondiente al Issue #7.

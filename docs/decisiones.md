@@ -83,3 +83,72 @@ Antes de cerrar la implementación, confirmar con el equipo:
 Esta documentación corresponde a la Issue #5, CRUD de Productos.
 
 No se incorporan nuevas entidades, paginación, búsqueda ni modificaciones al módulo de Ventas.
+
+
+Decisiones del módulo de Ventas – Issue #7
+
+Decisión 03: Política de descuentos y redondeo
+
+Contexto
+
+El módulo Ventas debe calcular los importes de cada operación desde el backend, utilizando los precios vigentes de los productos y evitando confiar en precios o totales enviados por el cliente.
+
+Implementación actual
+
+Descuento opcional: Se admite un porcentaje de descuento entre 0 % y 100 %, inclusive.
+
+Descuento predeterminado: Cuando no se informa un porcentaje, se utiliza 0 %.
+
+Cálculo de importes: Se utiliza BigDecimal para calcular subtotales, descuento y total.
+
+Redondeo: Se utiliza RoundingMode.HALF_UP a dos decimales.
+
+Precio de venta: Se obtiene desde la entidad Producto, no desde la solicitud del cliente.
+
+Estado: Implementado y probado. Pendiente de confirmación con el equipo respecto de quién puede establecer el porcentaje de descuento y si esta política es la acordada.
+
+Decisión 04: Cantidades y control de stock
+
+Contexto
+
+El módulo Productos representa el stock mediante Double, mientras que los detalles de Ventas utilizan BigDecimal para las cantidades.
+
+El sistema admite productos vendidos en cantidades fraccionarias.
+
+Implementación actual
+
+Cada cantidad solicitada debe ser mayor que cero.
+
+El producto debe existir y disponer de stock suficiente.
+
+El sistema rechaza la venta si la cantidad solicitada supera el stock.
+
+Cuando un producto aparece repetido en una venta, el stock disponible se verifica durante el procesamiento de cada detalle.
+
+La venta, sus detalles y las modificaciones del stock se procesan mediante una transacción.
+
+Si ocurre un error que provoca rollback, se revierten las modificaciones realizadas.
+
+Estado: Implementado y probado para los casos indicados.
+
+Pendiente: Acordar la cantidad máxima de decimales permitidos en las cantidades y la política de conversión entre BigDecimal y Double.
+
+También queda pendiente evaluar la protección del stock ante ventas simultáneas.
+
+Decisión 05: Cliente opcional en Ventas
+
+Contexto
+
+La Issue #7 establece que una venta puede registrarse sin asociarla a un cliente.
+
+Implementación actual
+
+El campo idCliente es opcional.
+
+Si no se proporciona, la venta se registra sin cliente asociado.
+
+Si se proporciona, el sistema verifica que el cliente exista.
+
+Si el cliente no existe, se devuelve HTTP 404 Not Found.
+
+Estado: Implementado y probado, de acuerdo con el contrato actual de la Issue #7.
