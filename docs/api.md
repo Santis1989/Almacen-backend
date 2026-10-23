@@ -225,3 +225,154 @@ siguen pendientes de confirmación.
 - Pruebas HTTP de los endpoints: pendientes.
 - Verificación de restricciones MySQL: pendiente.
 ```
+# API REST — Detalles de venta (issue #8)
+
+## Alcance
+
+Los detalles se registran dentro del POST de ventas y de su misma
+transacción. No se agregan operaciones CRUD independientes para detalles.
+
+Las relaciones con Venta y Producto son obligatorias y se representan
+en la entidad mediante asociaciones JPA.
+
+## Entrada de cada detalle
+
+DetalleVentaRequest contiene únicamente:
+
+| Campo | Tipo | Obligatorio | Restricciones |
+|---|---|---|---|
+| idProducto | Integer | Sí | Positivo y correspondiente a un producto existente |
+| cantidad | BigDecimal | Sí | Positiva, hasta 9 dígitos enteros y 3 decimales |
+
+El cliente de la API no determina el precio ni el subtotal del detalle.
+
+## Registro dentro de una venta
+
+POST /api/ventas
+
+Content-Type: application/json
+
+Ejemplo, utilizando un producto existente con precioVenta 10.50:
+
+```json
+{
+  "venta": {
+    "subtotal": 2.63,
+    "porcentajeDescuento": 0.00,
+    "montoDescuento": 0.00,
+    "total": 2.63
+  },
+  "detalles": [
+    {
+      "idProducto": 1,
+      "cantidad": 0.250
+    }
+  ]
+}
+```
+
+El ID 1 es ilustrativo: debe reemplazarse por un producto existente.
+
+La propiedad venta conserva el contrato existente del módulo.
+Actualmente sus importes generales se reciben en la petición;
+esta issue no implementa el cálculo general de descuentos y totales.
+No debe enviarse idVenta al registrar una venta nueva.
+
+Respuestas:
+
+- 200 OK: devuelve la venta registrada según el contrato existente.
+- 400 Bad Request: cuerpo ausente o ilegible, venta ausente,
+  lista de detalles nula o vacía, elementos nulos, datos de detalle
+  inválidos o importes fuera del rango admitido.
+- 404 Not Found: producto inexistente o cliente inexistente
+  cuando se haya indicado un cliente.
+
+## Cálculo y persistencia
+
+El servicio busca el producto y obtiene su precioVenta.
+El precio aplicado queda almacenado en el detalle, conservando
+su valor aunque cambie posteriormente el precio del producto.
+
+Se calcula cantidad por precio usando BigDecimal.
+Provisionalmente, el subtotal se redondea a 2 decimales con HALF_UP.
+Ejemplo: 0.250 por 10.50 produce 2.625 y se guarda como 2.63.
+
+Precio y subtotal deben ser no negativos y representables
+en DECIMAL(12,2). El precio no se redondea silenciosamente.
+Cantidad se almacena como DECIMAL(12,3), sin redondear valores
+que excedan la precisión admitida.
+
+La precisión de cantidad, la fuente del precio y el redondeo
+siguen pendientes de confirmación formal del equipo.
+
+Se conserva el comportamiento existente que permite descontar
+stock aunque el resultado sea negativo. Producto.stock continúa
+utilizando Double; no se migró su tipo en esta issue.
+
+## Consulta de detalles
+
+GET /api/ventas/{id}/detalles
+
+Respuestas:
+
+- 200 OK: lista de DetalleVentaResponse.
+- 200 OK con []: la venta existe pero no tiene detalles.
+- 404 Not Found: la venta no existe.
+
+Ejemplo de respuesta:
+
+```json
+[
+  {
+    "idDetalle": 1,
+    "idProducto": 1,
+    "nombreProducto": "Producto prueba detalle",
+    "cantidad": 0.250,
+    "precio": 10.50,
+    "subtotal": 2.63
+  }
+]
+```
+
+La respuesta utiliza DTOs. No incluye objetos JPA Venta o Producto
+anidados ni referencias circulares.
+
+## Transacción
+
+VentaService coordina el registro con @Transactional.
+Un fallo en un detalle debe revertir la venta, los detalles
+y las modificaciones de stock de esa operación.
+
+## Verificación realizada
+
+Pruebas manuales con Postman y MySQL:
+
+- Registro y consulta de un detalle válido.
+- Redondeo de 2.625 a 2.63.
+- Descuento de stock de 10 a 9.75.
+- Rechazo de cantidades cero, negativas y nulas.
+- Respuesta 404 al consultar una venta inexistente.
+- Respuesta 400 para cuerpo ausente o request vacío.
+- Fallo en el segundo producto: conteos de ventas y detalles
+  y stock sin cambios después del rechazo.
+
+Pruebas automatizadas en H2:
+
+- Registro válido, consulta, precio, subtotal y stock.
+- Rollback ante producto inexistente en el segundo renglón.
+- Rechazo de cantidades nula, cero, negativa, con exceso
+  de decimales y fuera del rango entero.
+
+Comando utilizado desde Git Bash:
+
+```bash
+./mvnw.cmd -Dspring.profiles.active=test test
+```
+
+Resultado observado: 24 pruebas, 0 fallos, 0 errores,
+0 omitidas y BUILD SUCCESS.
+Siete ejecuciones pertenecen a DetalleVentaIntegrationTest.
+
+H2 no reproduce todas las particularidades de MySQL.
+La comprobación manual del esquema y del flujo en MySQL
+complementa estas pruebas.

@@ -83,3 +83,31 @@ Antes de cerrar la implementación, confirmar con el equipo:
 Esta documentación corresponde a la Issue #5, CRUD de Productos.
 
 No se incorporan nuevas entidades, paginación, búsqueda ni modificaciones al módulo de Ventas.
+## Detalles de venta — precisión propuesta para la issue #8
+
+Se propone admitir cantidades positivas con hasta 9 dígitos
+enteros y 3 decimales, para permitir ventas de productos por peso.
+
+Esta restricción se incorporó en DetalleVentaRequest mediante
+@NotNull, @Positive y @Digits(integer = 9, fraction = 3).
+
+La precisión todavía está pendiente de confirmación del equipo.
+También falta alinear la entidad y el servicio con esta propuesta
+y coordinarla con el stock de Producto, que actualmente usa Double.
+
+Esta decisión no define todavía la política de redondeo
+de los importes.
+### Importes del detalle — propuesta pendiente de confirmación
+
+Se implementa provisionalmente la obtención del precio desde
+Producto.precioVenta. Ese valor se almacena en DetalleVenta.precio
+como precio aplicado al momento de la venta.
+
+El subtotal se calcula en el backend mediante cantidad por precio,
+usando BigDecimal y redondeando a 2 decimales con HALF_UP.
+
+Precio y subtotal deben ser no negativos y representables en
+DECIMAL(12,2). El precio no se redondea silenciosamente.
+
+La fuente del precio y el modo de redondeo siguen pendientes
+de confirmación del equipo.
