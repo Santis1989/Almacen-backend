@@ -1,6 +1,7 @@
 package ies.belgrano.almacen.model;
 
 import jakarta.persistence.*;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 
 import java.math.BigDecimal;
 
@@ -13,25 +14,27 @@ public class DetalleVenta {
     @Column(name = "id_detalle")
     private Integer idDetalle;
 
-    @Column(name = "id_venta", nullable = false)
-    private Integer idVenta;
+    @JsonIgnore
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "id_venta", nullable = false)
+    private Venta venta;
 
-    @Column(name = "id_producto", nullable = false)
-    private Integer idProducto;
+    @JsonIgnore
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "id_producto", nullable = false)
+    private Producto producto;
 
-    @Column(name = "cantidad", nullable = false)
+    @Column(name = "cantidad", nullable = false, precision = 12, scale = 3)
     private BigDecimal cantidad;
 
-    @Column(name = "precio", nullable = false)
+    @Column(name = "precio", nullable = false, precision = 12, scale = 2)
     private BigDecimal precio;
 
-    @Column(name = "subtotal")
+    @Column(name = "subtotal", nullable = false, precision = 12, scale = 2)
     private BigDecimal subtotal;
-
 
     public DetalleVenta() {
     }
-
 
     public Integer getIdDetalle() {
         return idDetalle;
@@ -41,24 +44,21 @@ public class DetalleVenta {
         this.idDetalle = idDetalle;
     }
 
-
-    public Integer getIdVenta() {
-        return idVenta;
+    public Venta getVenta() {
+        return venta;
     }
 
-    public void setIdVenta(Integer idVenta) {
-        this.idVenta = idVenta;
+    public void setVenta(Venta venta) {
+        this.venta = venta;
     }
 
-
-    public Integer getIdProducto() {
-        return idProducto;
+    public Producto getProducto() {
+        return producto;
     }
 
-    public void setIdProducto(Integer idProducto) {
-        this.idProducto = idProducto;
+    public void setProducto(Producto producto) {
+        this.producto = producto;
     }
-
 
     public BigDecimal getCantidad() {
         return cantidad;
@@ -68,7 +68,6 @@ public class DetalleVenta {
         this.cantidad = cantidad;
     }
 
-
     public BigDecimal getPrecio() {
         return precio;
     }
@@ -76,7 +75,6 @@ public class DetalleVenta {
     public void setPrecio(BigDecimal precio) {
         this.precio = precio;
     }
-
 
     public BigDecimal getSubtotal() {
         return subtotal;

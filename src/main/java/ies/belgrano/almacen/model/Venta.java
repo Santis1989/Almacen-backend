@@ -2,9 +2,12 @@
 package ies.belgrano.almacen.model;
 
 import jakarta.persistence.*;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Table(name = "ventas")
@@ -18,17 +21,25 @@ public class Venta {
     @Column(name = "fecha")
     private LocalDateTime fecha;
 
-    @Column(name = "subtotal", nullable = false)
+    @Column(name = "subtotal", nullable = false, precision = 12, scale = 2)
     private BigDecimal subtotal;
 
-    @Column(name = "porcentaje_descuento", nullable = false)
+    @Column(name = "porcentaje_descuento", nullable = false, precision = 5, scale = 2)
     private BigDecimal porcentajeDescuento;
 
-    @Column(name = "monto_descuento", nullable = false)
+    @Column(name = "monto_descuento", nullable = false, precision = 12, scale = 2)
     private BigDecimal montoDescuento;
 
-    @Column(name = "total", nullable = false)
+    @Column(name = "total", nullable = false, precision = 12, scale = 2)
     private BigDecimal total;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "id_cliente")
+    private Cliente cliente;
+
+    @JsonIgnore
+    @OneToMany(mappedBy = "venta")
+    private List<DetalleVenta> detalles = new ArrayList<>();
 
 
     public Venta() {
@@ -91,5 +102,21 @@ public class Venta {
 
     public void setTotal(BigDecimal total) {
         this.total = total;
+    }
+
+    public Cliente getCliente() {
+        return cliente;
+    }
+
+    public void setCliente(Cliente cliente) {
+        this.cliente = cliente;
+    }
+
+    public List<DetalleVenta> getDetalles() {
+        return detalles;
+    }
+
+    public void setDetalles(List<DetalleVenta> detalles) {
+        this.detalles = detalles;
     }
 }

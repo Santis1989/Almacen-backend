@@ -1,14 +1,13 @@
 package ies.belgrano.almacen.controller;
 
 import ies.belgrano.almacen.dto.VentaRequest;
-import ies.belgrano.almacen.model.DetalleVenta;
 import ies.belgrano.almacen.model.Venta;
 import ies.belgrano.almacen.service.VentaService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
+import jakarta.validation.Valid;
 import java.util.List;
-
+import ies.belgrano.almacen.dto.DetalleVentaResponse;
 @RestController
 @RequestMapping("/api/ventas")
 public class VentaController {
@@ -50,9 +49,8 @@ public class VentaController {
     // ==================================================
 
     @GetMapping("/{id}/detalles")
-    public List<DetalleVenta> listarDetalles(
-            @PathVariable Integer id
-    ) {
+    public List<DetalleVentaResponse> listarDetalles(
+            @PathVariable Integer id) {
 
         return ventaService.listarDetalles(id);
     }
@@ -63,16 +61,11 @@ public class VentaController {
     // ==================================================
 
     @PostMapping
-    public ResponseEntity<Venta> registrarVenta(
-            @RequestBody VentaRequest request
-    ) {
-
+    public ResponseEntity<Venta> registrarVenta(@Valid @RequestBody VentaRequest request) {
         Venta ventaGuardada =
                 ventaService.registrarVenta(
                         request.getVenta(),
-                        request.getDetalles()
-                );
-
+                        request.getDetalles());
         return ResponseEntity.ok(ventaGuardada);
     }
 }
