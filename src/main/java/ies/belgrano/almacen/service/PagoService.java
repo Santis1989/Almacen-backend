@@ -1,3 +1,4 @@
+
 package ies.belgrano.almacen.service;
 
 import ies.belgrano.almacen.model.Fiado;
@@ -23,6 +24,7 @@ public class PagoService {
         this.fiadoRepository = fiadoRepository;
     }
 
+    // Registrar un pago de un fiado
     @Transactional
     public Pago registrarPago(Integer idFiado, BigDecimal importe) {
 
@@ -58,15 +60,17 @@ public class PagoService {
         // 6. Guardar el fiado actualizado
         fiadoRepository.save(fiado);
 
-        // 7. Registrar el pago en el historial
+        // 7. Registrar el pago relacionado con el fiado
         Pago pago = new Pago();
-        pago.setIdFiado(idFiado);
+        pago.setFiado(fiado);
         pago.setImporte(importe);
 
         return pagoRepository.save(pago);
     }
 
+    // Obtener el historial de pagos de un fiado
+    @Transactional(readOnly = true)
     public List<Pago> obtenerPagosPorFiado(Integer idFiado) {
-        return pagoRepository.findByIdFiadoOrderByFechaAsc(idFiado);
+        return pagoRepository.findByFiado_IdFiadoOrderByFechaAsc(idFiado);
     }
 }

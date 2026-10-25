@@ -1,10 +1,13 @@
 
 package ies.belgrano.almacen.service;
 
+import ies.belgrano.almacen.model.Cliente;
 import ies.belgrano.almacen.model.Fiado;
-import ies.belgrano.almacen.repository.FiadoRepository;
 import ies.belgrano.almacen.repository.ClienteRepository;
+import ies.belgrano.almacen.repository.FiadoRepository;
+
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -16,7 +19,6 @@ public class FiadoService {
     private final FiadoRepository fiadoRepository;
     private final ClienteRepository clienteRepository;
 
-    // Constructor
     public FiadoService(
             FiadoRepository fiadoRepository,
             ClienteRepository clienteRepository) {
@@ -26,49 +28,43 @@ public class FiadoService {
     }
 
     // Listar todos los fiados
+    @Transactional(readOnly = true)
     public List<Fiado> listarTodos() {
         return fiadoRepository.findAll();
     }
 
-    // Buscar un fiado por ID
+    // Buscar fiado por ID
+    @Transactional(readOnly = true)
     public Optional<Fiado> buscarPorId(Integer id) {
         return fiadoRepository.findById(id);
     }
 
     // Crear un nuevo fiado
+    @Transactional
     public Fiado guardar(Fiado fiado) {
 
-        // Validar los importes
         validarImportes(fiado);
-
-        // Validar que el cliente exista
         validarCliente(fiado);
-
-        // Calcular el estado del fiado
         actualizarEstado(fiado);
 
-        // Guardar en la base de datos
         return fiadoRepository.save(fiado);
     }
 
-    // Modificar un fiado existente
+    // Actualizar un fiado existente
+    @Transactional
     public Fiado actualizar(Integer id, Fiado fiado) {
 
-        // Validar los importes
         validarImportes(fiado);
-
-        // Validar que el cliente exista
         validarCliente(fiado);
 
-        // Buscar el fiado existente
         Fiado existente = fiadoRepository.findById(id)
                 .orElseThrow(() ->
                         new RuntimeException("Fiado no encontrado"));
 
-        // Actualizar los datos
-        existente.setIdCliente(fiado.getIdCliente());
+        // Asignar el cliente validado
+        existente.setCliente(fiado.getCliente());
 
-        // Conservar la fecha si no se proporciona una nueva
+        // Actualizar fecha si corresponde
         if (fiado.getFecha() != null) {
             existente.setFecha(fiado.getFecha());
         }
@@ -76,75 +72,75 @@ public class FiadoService {
         existente.setMontoTotal(fiado.getMontoTotal());
         existente.setSaldo(fiado.getSaldo());
 
-        // Recalcular el estado
         actualizarEstado(existente);
 
-        // Guardar los cambios
         return fiadoRepository.save(existente);
     }
 
-    // Validar los importes del fiado
+    // Validar los importes
     private void validarImportes(Fiado fiado) {
 
         if (fiado == null) {
             throw new IllegalArgumentException(
-                    "Los datos del fiado son obligatorios"
-            );
+                    "Los datos del fiado son obligatorios");
         }
 
-        if (fiado.getMontoTotal() == null
-                || fiado.getMontoTotal().compareTo(BigDecimal.ZERO) <= 0) {
+        if (fiado.getMontoTotal() == null ||
+                fiado.getMontoTotal().compareTo(BigDecimal.ZERO) <= 0) {
 
             throw new IllegalArgumentException(
-                    "El monto total debe ser mayor a cero"
-            );
+                    "El monto total debe ser mayor a cero");
         }
 
-        if (fiado.getSaldo() == null
-                || fiado.getSaldo().compareTo(BigDecimal.ZERO) < 0) {
+        if (fiado.getSaldo() == null ||
+                fiado.getSaldo().compareTo(BigDecimal.ZERO) < 0) {
 
             throw new IllegalArgumentException(
-                    "El saldo no puede ser negativo"
-            );
+                    "El saldo no puede ser negativo");
         }
 
         if (fiado.getSaldo().compareTo(fiado.getMontoTotal()) > 0) {
 
             throw new IllegalArgumentException(
-                    "El saldo no puede superar el monto total"
-            );
+                    "El saldo no puede superar el monto total");
         }
     }
 
     // Validar que el cliente exista
     private void validarCliente(Fiado fiado) {
 
-        if (fiado.getIdCliente() == null) {
+        if (fiado.getCliente() == null ||
+                fiado.getCliente().getIdCliente() == null) {
+
             throw new IllegalArgumentException(
-                    "Debe seleccionar un cliente"
-            );
+                    "Debe seleccionar un cliente");
         }
 
-        if (!clienteRepository.existsById(fiado.getIdCliente())) {
-            throw new IllegalArgumentException(
-                    "El cliente indicado no existe"
-            );
-        }
+        Integer idCliente = fiado.getCliente().getIdCliente();
+
+        Cliente cliente = clienteRepository.findById(idCliente)
+                .orElseThrow(() ->
+                        new IllegalArgumentException(
+                                "El cliente indicado no existe"));
+
+        fiado.setCliente(cliente);
     }
 
     // Eliminar un fiado
+    @Transactional
     public void eliminar(Integer id) {
         fiadoRepository.deleteById(id);
     }
 
-    // Calcular el estado según el saldo
+    // Calcular el estado del fiado
     private void actualizarEstado(Fiado fiado) {
 
         if (fiado.getSaldo().compareTo(BigDecimal.ZERO) == 0) {
 
             fiado.setEstado("CANCELADO");
 
-        } else if (fiado.getSaldo().compareTo(fiado.getMontoTotal()) < 0) {
+        } else if (fiado.getSaldo().compareTo(
+                fiado.getMontoTotal()) < 0) {
 
             fiado.setEstado("PARCIAL");
 

@@ -1,3 +1,4 @@
+
 package ies.belgrano.almacen.repository;
 
 import ies.belgrano.almacen.model.Pago;
@@ -7,6 +8,6 @@ import java.util.List;
 
 public interface PagoRepository extends JpaRepository<Pago, Integer> {
 
-    List<Pago> findByIdFiadoOrderByFechaAsc(Integer idFiado);
+    List<Pago> findByFiado_IdFiadoOrderByFechaAsc(Integer idFiado);
 
 }

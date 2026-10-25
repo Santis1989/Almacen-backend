@@ -1,3 +1,4 @@
+
 package ies.belgrano.almacen.controller;
 
 import ies.belgrano.almacen.dto.PagoRequest;
@@ -19,6 +20,7 @@ public class PagoController {
         this.pagoService = pagoService;
     }
 
+    // POST - Registrar un pago de un fiado
     @PostMapping("/{idFiado}/pagos")
     public ResponseEntity<Pago> registrarPago(
             @PathVariable Integer idFiado,
@@ -29,9 +31,10 @@ public class PagoController {
                 request.getImporte()
         );
 
-        return ResponseEntity.ok(pago);
+        return ResponseEntity.status(201).body(pago);
     }
 
+    // GET - Consultar historial de pagos
     @GetMapping("/{idFiado}/pagos")
     public ResponseEntity<List<Pago>> obtenerPagos(
             @PathVariable Integer idFiado) {

@@ -1,7 +1,9 @@
+
 package ies.belgrano.almacen.controller;
 
 import ies.belgrano.almacen.model.Fiado;
 import ies.belgrano.almacen.service.FiadoService;
+
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -28,27 +30,24 @@ public class FiadoController {
     public ResponseEntity<Fiado> buscarPorId(@PathVariable Integer id) {
         return fiadoService.buscarPorId(id)
                 .map(ResponseEntity::ok)
-                .orElse(ResponseEntity.notFound().build());
+                .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
     // POST - Crear un nuevo fiado
     @PostMapping
-    public Fiado crear(@RequestBody Fiado fiado) {
-        return fiadoService.guardar(fiado);
+    public ResponseEntity<Fiado> crear(@RequestBody Fiado fiado) {
+        Fiado guardado = fiadoService.guardar(fiado);
+        return ResponseEntity.status(201).body(guardado);
     }
 
-    // PUT - Modificar un fiado
+    // PUT - Actualizar un fiado
     @PutMapping("/{id}")
     public ResponseEntity<Fiado> actualizar(
             @PathVariable Integer id,
             @RequestBody Fiado fiado) {
 
-        try {
-            Fiado actualizado = fiadoService.actualizar(id, fiado);
-            return ResponseEntity.ok(actualizado);
-        } catch (RuntimeException e) {
-            return ResponseEntity.notFound().build();
-        }
+        Fiado actualizado = fiadoService.actualizar(id, fiado);
+        return ResponseEntity.ok(actualizado);
     }
 
     // DELETE - Eliminar un fiado

@@ -1,3 +1,4 @@
+
 package ies.belgrano.almacen.model;
 
 import jakarta.persistence.*;
@@ -13,8 +14,9 @@ public class Pago {
     @Column(name = "id_pago")
     private Integer idPago;
 
-    @Column(name = "id_fiado", nullable = false)
-    private Integer idFiado;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "id_fiado", nullable = false)
+    private Fiado fiado;
 
     @Column(name = "fecha")
     private LocalDateTime fecha;
@@ -22,6 +24,9 @@ public class Pago {
     @Column(name = "importe", nullable = false,
             precision = 10, scale = 2)
     private BigDecimal importe;
+
+    public Pago() {
+    }
 
     @PrePersist
     public void antesDeGuardar() {
@@ -38,12 +43,12 @@ public class Pago {
         this.idPago = idPago;
     }
 
-    public Integer getIdFiado() {
-        return idFiado;
+    public Fiado getFiado() {
+        return fiado;
     }
 
-    public void setIdFiado(Integer idFiado) {
-        this.idFiado = idFiado;
+    public void setFiado(Fiado fiado) {
+        this.fiado = fiado;
     }
 
     public LocalDateTime getFecha() {
