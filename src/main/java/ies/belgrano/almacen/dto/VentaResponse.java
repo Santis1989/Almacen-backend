@@ -15,6 +15,7 @@ public class VentaResponse {
     private BigDecimal montoDescuento;
     private BigDecimal total;
     private List<DetalleVentaResponse> detalles;
+    private List<String> advertencias;
 
     public VentaResponse() {
     }
@@ -84,5 +85,14 @@ public class VentaResponse {
     public void setDetalles(
             List<DetalleVentaResponse> detalles) {
         this.detalles = detalles;
+    }
+
+    public List<String> getAdvertencias() {
+        return advertencias;
+    }
+
+    public void setAdvertencias(
+            List<String> advertencias) {
+        this.advertencias = advertencias;
     }
 }

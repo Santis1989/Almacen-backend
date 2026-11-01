@@ -107,33 +107,34 @@ Precio de venta: Se obtiene desde la entidad Producto, no desde la solicitud del
 
 Estado: Implementado y probado. Pendiente de confirmación con el equipo respecto de quién puede establecer el porcentaje de descuento y si esta política es la acordada.
 
-Decisión 04: Cantidades y control de stock
+### Decisión 04: Cantidades y control de stock
 
-Contexto
+**Contexto**
 
-El módulo Productos representa el stock mediante Double, mientras que los detalles de Ventas utilizan BigDecimal para las cantidades.
+El módulo Productos representa el stock mediante `Double`, mientras que los detalles de Ventas utilizan `BigDecimal` para las cantidades.
 
 El sistema admite productos vendidos en cantidades fraccionarias.
 
-Implementación actual
+Se acordó permitir el registro de ventas incluso cuando la cantidad solicitada supera el stock disponible, informando una advertencia sin impedir la operación.
 
-Cada cantidad solicitada debe ser mayor que cero.
+**Implementación actual**
 
-El producto debe existir y disponer de stock suficiente.
+- Cada cantidad solicitada debe ser mayor que cero.
+- El producto debe existir y tener un valor de stock definido.
+- El sistema permite registrar una venta aunque la cantidad solicitada supere el stock disponible.
+- Cuando el stock resulta insuficiente, la venta se registra igualmente y el stock puede quedar negativo.
+- En estos casos, el backend devuelve una advertencia en el campo `advertencias` de la respuesta de la venta, indicando el producto, el stock anterior, la cantidad vendida y el stock restante.
+- Cuando un producto aparece repetido en una misma venta, se descuentan las cantidades de cada detalle y se genera una advertencia si el stock queda negativo.
+- La venta, sus detalles y las modificaciones del stock se procesan mediante una transacción.
+- Si ocurre un error que provoca rollback, se revierten las modificaciones realizadas.
 
-El sistema rechaza la venta si la cantidad solicitada supera el stock.
+**Estado:** Implementado y probado mediante pruebas unitarias y de integración. Las 28 pruebas automatizadas finalizaron correctamente.
 
-Cuando un producto aparece repetido en una venta, el stock disponible se verifica durante el procesamiento de cada detalle.
+**Pendiente:**
 
-La venta, sus detalles y las modificaciones del stock se procesan mediante una transacción.
-
-Si ocurre un error que provoca rollback, se revierten las modificaciones realizadas.
-
-Estado: Implementado y probado para los casos indicados.
-
-Pendiente: Acordar la cantidad máxima de decimales permitidos en las cantidades y la política de conversión entre BigDecimal y Double.
-
-También queda pendiente evaluar la protección del stock ante ventas simultáneas.
+- Acordar la cantidad máxima de decimales permitidos en las cantidades y la política de conversión entre `BigDecimal` y `Double`.
+- Evaluar la protección del stock ante ventas simultáneas.
+- Integrar en el frontend la visualización de las advertencias devueltas por el backend.
 
 Decisión 05: Cliente opcional en Ventas
 

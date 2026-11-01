@@ -6,7 +6,6 @@ import ies.belgrano.almacen.dto.DetalleVentaResponse;
 import ies.belgrano.almacen.dto.VentaRequest;
 import ies.belgrano.almacen.dto.VentaResponse;
 
-import ies.belgrano.almacen.exception.ConflictException;
 import ies.belgrano.almacen.exception.ResourceNotFoundException;
 
 import ies.belgrano.almacen.model.Cliente;
@@ -112,6 +111,7 @@ public class VentaService {
                 }
 
                 List<DetalleVenta> detalles = new ArrayList<>();
+                List<String> advertencias = new ArrayList<>();
 
                 BigDecimal subtotalVenta = BigDecimal.ZERO;
 
@@ -138,7 +138,7 @@ public class VentaService {
 
                         BigDecimal cantidad = detalleRequest.getCantidad();
 
-                        // Validar stock
+                        // Validar que el stock esté definido
                         if (producto.getStock() == null) {
 
                                 throw new IllegalArgumentException(
@@ -147,14 +147,6 @@ public class VentaService {
                         }
 
                         BigDecimal stockDisponible = BigDecimal.valueOf(producto.getStock());
-
-                        // CAMBIO: devolver 409 Conflict
-                        if (stockDisponible.compareTo(cantidad) < 0) {
-
-                                throw new ConflictException(
-                                                "Stock insuficiente para el producto: "
-                                                                + producto.getNombre());
-                        }
 
                         // Obtener precio desde la base de datos
                         BigDecimal precio = producto.getPrecioVenta();
@@ -183,8 +175,22 @@ public class VentaService {
 
                         subtotalVenta = subtotalVenta.add(subtotalDetalle);
 
-                        // Actualizar stock
+                        // Actualizar stock, permitiendo valores negativos
                         BigDecimal nuevoStock = stockDisponible.subtract(cantidad);
+
+                        // Si se vende más de lo disponible, generar advertencia
+                        if (nuevoStock.compareTo(BigDecimal.ZERO) < 0) {
+
+                                advertencias.add(
+                                                "Advertencia: stock insuficiente para el producto "
+                                                                + producto.getNombre()
+                                                                + ". Stock anterior: "
+                                                                + stockDisponible.toPlainString()
+                                                                + ", cantidad vendida: "
+                                                                + cantidad.toPlainString()
+                                                                + ", stock restante: "
+                                                                + nuevoStock.toPlainString());
+                        }
 
                         producto.setStock(nuevoStock.doubleValue());
 
@@ -239,7 +245,11 @@ public class VentaService {
                         detalleVentaRepository.save(detalle);
                 }
 
-                return convertirAResponse(ventaGuardada);
+                // Preparar respuesta con advertencias
+                VentaResponse respuesta = convertirAResponse(ventaGuardada);
+                respuesta.setAdvertencias(advertencias);
+
+                return respuesta;
         }
 
         private VentaResponse convertirAResponse(Venta venta) {
@@ -274,6 +284,9 @@ public class VentaService {
                 }
 
                 respuesta.setDetalles(detalles);
+
+                // Las consultas no reconstruyen advertencias históricas
+                respuesta.setAdvertencias(new ArrayList<>());
 
                 return respuesta;
         }

@@ -5,8 +5,6 @@ import ies.belgrano.almacen.dto.DetalleVentaRequest;
 import ies.belgrano.almacen.dto.VentaRequest;
 import ies.belgrano.almacen.dto.VentaResponse;
 
-import ies.belgrano.almacen.exception.ConflictException;
-
 import ies.belgrano.almacen.model.Producto;
 
 import ies.belgrano.almacen.repository.ProductoRepository;
@@ -28,218 +26,249 @@ import static org.junit.jupiter.api.Assertions.*;
 @ActiveProfiles("test")
 class VentaIntegracionTest {
 
-    @Autowired
-    private VentaService ventaService;
+        @Autowired
+        private VentaService ventaService;
 
-    @Autowired
-    private ProductoRepository productoRepository;
+        @Autowired
+        private ProductoRepository productoRepository;
 
-    @Autowired
-    private VentaRepository ventaRepository;
+        @Autowired
+        private VentaRepository ventaRepository;
 
-    @Autowired
-    private DetalleVentaRepository detalleVentaRepository;
+        @Autowired
+        private DetalleVentaRepository detalleVentaRepository;
 
-    // =====================================================
-    // PRUEBA 1: ROLLBACK POR STOCK INSUFICIENTE
-    // =====================================================
+        // =====================================================
+        // PRUEBA 1: VENTA CON STOCK INSUFICIENTE
+        // La venta debe registrarse y dejar stock negativo.
+        // =====================================================
 
-    @Test
-    void registrarVenta_stockInsuficienteRevierteTransaccion() {
+        @Test
+        void registrarVenta_stockInsuficientePermiteVentaConAdvertencia() {
 
-        long ventasAntes = ventaRepository.count();
-        long detallesAntes = detalleVentaRepository.count();
+                long ventasAntes = ventaRepository.count();
+                long detallesAntes = detalleVentaRepository.count();
 
-        Producto arroz = new Producto();
-        arroz.setNombre("Arroz 1kg");
-        arroz.setPrecioVenta(new BigDecimal("1800.00"));
-        arroz.setStock(10.0);
-        arroz = productoRepository.save(arroz);
+                Producto arroz = new Producto();
+                arroz.setNombre("Arroz stock insuficiente");
+                arroz.setPrecioVenta(new BigDecimal("1800.00"));
+                arroz.setStock(10.0);
+                arroz = productoRepository.save(arroz);
 
-        Producto azucar = new Producto();
-        azucar.setNombre("Azucar 1kg");
-        azucar.setPrecioVenta(new BigDecimal("1200.00"));
-        azucar.setStock(5.0);
-        azucar = productoRepository.save(azucar);
+                Producto azucar = new Producto();
+                azucar.setNombre("Azucar stock insuficiente");
+                azucar.setPrecioVenta(new BigDecimal("1200.00"));
+                azucar.setStock(5.0);
+                azucar = productoRepository.save(azucar);
 
-        DetalleVentaRequest detalleArroz = new DetalleVentaRequest();
+                DetalleVentaRequest detalleArroz = new DetalleVentaRequest();
+                detalleArroz.setIdProducto(arroz.getIdProducto());
+                detalleArroz.setCantidad(new BigDecimal("2"));
 
-        detalleArroz.setIdProducto(arroz.getIdProducto());
-        detalleArroz.setCantidad(new BigDecimal("2"));
+                DetalleVentaRequest detalleAzucar = new DetalleVentaRequest();
+                detalleAzucar.setIdProducto(azucar.getIdProducto());
+                detalleAzucar.setCantidad(new BigDecimal("10"));
 
-        DetalleVentaRequest detalleAzucar = new DetalleVentaRequest();
+                VentaRequest request = new VentaRequest();
+                request.setIdCliente(null);
+                request.setPorcentajeDescuento(BigDecimal.ZERO);
+                request.setDetalles(List.of(detalleArroz, detalleAzucar));
 
-        detalleAzucar.setIdProducto(azucar.getIdProducto());
-        detalleAzucar.setCantidad(new BigDecimal("10"));
+                // La venta debe completarse, sin lanzar excepción.
+                VentaResponse respuesta = ventaService.registrarVenta(request);
 
-        VentaRequest request = new VentaRequest();
+                assertNotNull(respuesta);
+                assertNotNull(respuesta.getIdVenta());
 
-        request.setIdCliente(null);
-        request.setPorcentajeDescuento(BigDecimal.ZERO);
-        request.setDetalles(
-                List.of(detalleArroz, detalleAzucar));
+                // 2 arroces x 1800 + 10 azúcares x 1200 = 15600.
+                assertEquals(
+                                0,
+                                new BigDecimal("15600.00")
+                                                .compareTo(respuesta.getTotal()));
 
-        assertThrows(
-                ConflictException.class,
-                () -> ventaService.registrarVenta(request));
+                // Se deben guardar los dos detalles.
+                assertNotNull(respuesta.getDetalles());
+                assertEquals(2, respuesta.getDetalles().size());
 
-        Producto arrozDespues = productoRepository
-                .findById(arroz.getIdProducto())
-                .orElseThrow();
+                // Debe generarse una advertencia para el azúcar.
+                assertNotNull(respuesta.getAdvertencias());
+                assertEquals(1, respuesta.getAdvertencias().size());
 
-        Producto azucarDespues = productoRepository
-                .findById(azucar.getIdProducto())
-                .orElseThrow();
+                assertTrue(
+                                respuesta.getAdvertencias().get(0)
+                                                .contains("Azucar stock insuficiente"));
 
-        assertEquals(10.0, arrozDespues.getStock());
-        assertEquals(5.0, azucarDespues.getStock());
+                // Comprobar los valores finales en la base de datos.
+                Producto arrozDespues = productoRepository
+                                .findById(arroz.getIdProducto())
+                                .orElseThrow();
 
-        assertEquals(ventasAntes, ventaRepository.count());
-        assertEquals(detallesAntes, detalleVentaRepository.count());
-    }
+                Producto azucarDespues = productoRepository
+                                .findById(azucar.getIdProducto())
+                                .orElseThrow();
 
-    // =====================================================
-    // PRUEBA 2: REGISTRO EXITOSO DE UNA VENTA
-    // =====================================================
+                assertEquals(8.0, arrozDespues.getStock());
+                assertEquals(-5.0, azucarDespues.getStock());
 
-    @Test
-    void registrarVenta_exitosaGuardaDetallesYActualizaStock() {
+                // La venta y sus detalles deben estar guardados.
+                assertEquals(ventasAntes + 1, ventaRepository.count());
+                assertEquals(detallesAntes + 2, detalleVentaRepository.count());
 
-        long ventasAntes = ventaRepository.count();
-        long detallesAntes = detalleVentaRepository.count();
+                assertTrue(
+                                ventaRepository.existsById(respuesta.getIdVenta()));
+        }
 
-        Producto arroz = new Producto();
-        arroz.setNombre("Arroz venta exitosa");
-        arroz.setPrecioVenta(new BigDecimal("1800.00"));
-        arroz.setStock(10.0);
-        arroz = productoRepository.save(arroz);
+        // =====================================================
+        // PRUEBA 2: REGISTRO EXITOSO DE UNA VENTA
+        // Cuando alcanza el stock, no debe haber advertencias.
+        // =====================================================
 
-        Producto azucar = new Producto();
-        azucar.setNombre("Azucar venta exitosa");
-        azucar.setPrecioVenta(new BigDecimal("1200.00"));
-        azucar.setStock(8.0);
-        azucar = productoRepository.save(azucar);
+        @Test
+        void registrarVenta_exitosaGuardaDetallesYActualizaStock() {
 
-        DetalleVentaRequest detalleArroz = new DetalleVentaRequest();
+                long ventasAntes = ventaRepository.count();
+                long detallesAntes = detalleVentaRepository.count();
 
-        detalleArroz.setIdProducto(arroz.getIdProducto());
-        detalleArroz.setCantidad(new BigDecimal("2"));
+                Producto arroz = new Producto();
+                arroz.setNombre("Arroz venta exitosa");
+                arroz.setPrecioVenta(new BigDecimal("1800.00"));
+                arroz.setStock(10.0);
+                arroz = productoRepository.save(arroz);
 
-        DetalleVentaRequest detalleAzucar = new DetalleVentaRequest();
+                Producto azucar = new Producto();
+                azucar.setNombre("Azucar venta exitosa");
+                azucar.setPrecioVenta(new BigDecimal("1200.00"));
+                azucar.setStock(8.0);
+                azucar = productoRepository.save(azucar);
 
-        detalleAzucar.setIdProducto(azucar.getIdProducto());
-        detalleAzucar.setCantidad(new BigDecimal("3"));
+                DetalleVentaRequest detalleArroz = new DetalleVentaRequest();
+                detalleArroz.setIdProducto(arroz.getIdProducto());
+                detalleArroz.setCantidad(new BigDecimal("2"));
 
-        VentaRequest request = new VentaRequest();
+                DetalleVentaRequest detalleAzucar = new DetalleVentaRequest();
+                detalleAzucar.setIdProducto(azucar.getIdProducto());
+                detalleAzucar.setCantidad(new BigDecimal("3"));
 
-        request.setIdCliente(null);
-        request.setPorcentajeDescuento(new BigDecimal("10"));
-        request.setDetalles(
-                List.of(detalleArroz, detalleAzucar));
+                VentaRequest request = new VentaRequest();
+                request.setIdCliente(null);
+                request.setPorcentajeDescuento(new BigDecimal("10"));
+                request.setDetalles(List.of(detalleArroz, detalleAzucar));
 
-        VentaResponse respuesta = ventaService.registrarVenta(request);
+                VentaResponse respuesta = ventaService.registrarVenta(request);
 
-        assertNotNull(respuesta);
-        assertNotNull(respuesta.getIdVenta());
+                assertNotNull(respuesta);
+                assertNotNull(respuesta.getIdVenta());
 
-        assertEquals(
-                0,
-                new BigDecimal("7200.00")
-                        .compareTo(respuesta.getSubtotal()));
+                assertEquals(
+                                0,
+                                new BigDecimal("7200.00")
+                                                .compareTo(respuesta.getSubtotal()));
 
-        assertEquals(
-                0,
-                new BigDecimal("720.00")
-                        .compareTo(respuesta.getMontoDescuento()));
+                assertEquals(
+                                0,
+                                new BigDecimal("720.00")
+                                                .compareTo(respuesta.getMontoDescuento()));
 
-        assertEquals(
-                0,
-                new BigDecimal("6480.00")
-                        .compareTo(respuesta.getTotal()));
+                assertEquals(
+                                0,
+                                new BigDecimal("6480.00")
+                                                .compareTo(respuesta.getTotal()));
 
-        assertNotNull(respuesta.getDetalles());
-        assertEquals(2, respuesta.getDetalles().size());
+                assertNotNull(respuesta.getDetalles());
+                assertEquals(2, respuesta.getDetalles().size());
 
-        Producto arrozDespues = productoRepository
-                .findById(arroz.getIdProducto())
-                .orElseThrow();
+                // No debe haber advertencias.
+                assertNotNull(respuesta.getAdvertencias());
+                assertTrue(respuesta.getAdvertencias().isEmpty());
 
-        Producto azucarDespues = productoRepository
-                .findById(azucar.getIdProducto())
-                .orElseThrow();
+                Producto arrozDespues = productoRepository
+                                .findById(arroz.getIdProducto())
+                                .orElseThrow();
 
-        assertEquals(8.0, arrozDespues.getStock());
-        assertEquals(5.0, azucarDespues.getStock());
+                Producto azucarDespues = productoRepository
+                                .findById(azucar.getIdProducto())
+                                .orElseThrow();
 
-        assertEquals(ventasAntes + 1, ventaRepository.count());
+                assertEquals(8.0, arrozDespues.getStock());
+                assertEquals(5.0, azucarDespues.getStock());
 
-        assertEquals(
-                detallesAntes + 2,
-                detalleVentaRepository.count());
+                assertEquals(ventasAntes + 1, ventaRepository.count());
+                assertEquals(
+                                detallesAntes + 2,
+                                detalleVentaRepository.count());
 
-        assertTrue(
-                ventaRepository.existsById(respuesta.getIdVenta()));
-    }
+                assertTrue(
+                                ventaRepository.existsById(respuesta.getIdVenta()));
+        }
 
-    // =====================================================
-    // PRUEBA 3: MISMO PRODUCTO REPETIDO SIN STOCK SUFICIENTE
-    // =====================================================
+        // =====================================================
+        // PRUEBA 3: MISMO PRODUCTO REPETIDO
+        // Se deben descontar ambas cantidades.
+        // =====================================================
 
-    @Test
-    void registrarVenta_productoRepetidoSuperaStockGeneraConflicto() {
+        @Test
+        void registrarVenta_productoRepetidoPermiteStockNegativo() {
 
-        // Guardamos la cantidad de registros antes de probar.
-        long ventasAntes = ventaRepository.count();
-        long detallesAntes = detalleVentaRepository.count();
+                long ventasAntes = ventaRepository.count();
+                long detallesAntes = detalleVentaRepository.count();
 
-        // 1. Crear un producto con 10 unidades.
-        Producto arroz = new Producto();
+                Producto arroz = new Producto();
+                arroz.setNombre("Arroz producto repetido");
+                arroz.setPrecioVenta(new BigDecimal("1800.00"));
+                arroz.setStock(10.0);
+                arroz = productoRepository.save(arroz);
 
-        arroz.setNombre("Arroz producto repetido");
-        arroz.setPrecioVenta(new BigDecimal("1800.00"));
-        arroz.setStock(10.0);
+                // Primer detalle: 7 unidades.
+                DetalleVentaRequest primerDetalle = new DetalleVentaRequest();
+                primerDetalle.setIdProducto(arroz.getIdProducto());
+                primerDetalle.setCantidad(new BigDecimal("7"));
 
-        arroz = productoRepository.save(arroz);
+                // Segundo detalle: 6 unidades del mismo producto.
+                DetalleVentaRequest segundoDetalle = new DetalleVentaRequest();
+                segundoDetalle.setIdProducto(arroz.getIdProducto());
+                segundoDetalle.setCantidad(new BigDecimal("6"));
 
-        // 2. Primer detalle: 7 unidades.
-        DetalleVentaRequest primerDetalle = new DetalleVentaRequest();
+                // Total vendido: 13 unidades.
+                // Stock inicial: 10 unidades.
+                // Stock final esperado: -3 unidades.
 
-        primerDetalle.setIdProducto(arroz.getIdProducto());
-        primerDetalle.setCantidad(new BigDecimal("7"));
+                VentaRequest request = new VentaRequest();
+                request.setIdCliente(null);
+                request.setPorcentajeDescuento(BigDecimal.ZERO);
+                request.setDetalles(List.of(primerDetalle, segundoDetalle));
 
-        // 3. Segundo detalle: 6 unidades del MISMO producto.
-        DetalleVentaRequest segundoDetalle = new DetalleVentaRequest();
+                VentaResponse respuesta = ventaService.registrarVenta(request);
 
-        segundoDetalle.setIdProducto(arroz.getIdProducto());
-        segundoDetalle.setCantidad(new BigDecimal("6"));
+                assertNotNull(respuesta);
+                assertNotNull(respuesta.getIdVenta());
 
-        // En total se solicitan 13 unidades.
-        // El stock disponible es solamente 10.
+                // 13 x 1800 = 23400.
+                assertEquals(
+                                0,
+                                new BigDecimal("23400.00")
+                                                .compareTo(respuesta.getTotal()));
 
-        // 4. Crear la solicitud de venta.
-        VentaRequest request = new VentaRequest();
+                assertNotNull(respuesta.getDetalles());
+                assertEquals(2, respuesta.getDetalles().size());
 
-        request.setIdCliente(null);
-        request.setPorcentajeDescuento(BigDecimal.ZERO);
-        request.setDetalles(
-                List.of(primerDetalle, segundoDetalle));
+                // El segundo detalle deja el stock negativo.
+                assertNotNull(respuesta.getAdvertencias());
+                assertEquals(1, respuesta.getAdvertencias().size());
 
-        // 5. La venta debe rechazarse por stock insuficiente.
-        assertThrows(
-                ConflictException.class,
-                () -> ventaService.registrarVenta(request));
+                assertTrue(
+                                respuesta.getAdvertencias().get(0)
+                                                .contains("Arroz producto repetido"));
 
-        // 6. Verificar que el stock permanezca en 10.
-        Producto arrozDespues = productoRepository
-                .findById(arroz.getIdProducto())
-                .orElseThrow();
+                Producto arrozDespues = productoRepository
+                                .findById(arroz.getIdProducto())
+                                .orElseThrow();
 
-        assertEquals(10.0, arrozDespues.getStock());
+                assertEquals(-3.0, arrozDespues.getStock());
 
-        // 7. Verificar que no se haya registrado la venta.
-        assertEquals(ventasAntes, ventaRepository.count());
+                assertEquals(ventasAntes + 1, ventaRepository.count());
+                assertEquals(detallesAntes + 2, detalleVentaRepository.count());
 
-        // 8. Verificar que no se hayan guardado detalles.
-        assertEquals(detallesAntes, detalleVentaRepository.count());
-    }
+                assertTrue(
+                                ventaRepository.existsById(respuesta.getIdVenta()));
+        }
 }

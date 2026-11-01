@@ -233,22 +233,20 @@ siguen pendientes de confirmación.
 
 ## 1. Descripción general
 
-El módulo Ventas permite registrar y consultar ventas
-realizadas en el sistema de almacén.
+El módulo Ventas permite registrar y consultar ventas realizadas en el sistema de almacén.
 
-Cada venta puede incluir uno o varios productos y
-puede estar asociada a un cliente o realizarse sin
-cliente registrado.
+Cada venta puede incluir uno o varios productos y puede estar asociada a un cliente o realizarse sin cliente registrado.
 
 El backend se encarga de:
 
 - Validar los productos y sus cantidades.
-- Comprobar el stock disponible.
+- Consultar el stock disponible y generar advertencias cuando resulte insuficiente.
+- Permitir registrar ventas aunque el stock quede negativo.
 - Obtener los precios desde la base de datos.
 - Calcular subtotal, descuento y total.
 - Descontar el stock de los productos vendidos.
 - Guardar la venta y sus detalles.
-- Revertir los cambios si ocurre un error.
+- Revertir los cambios si ocurre un error que provoca rollback.
 
 ## 2. Ruta base
 
@@ -266,8 +264,7 @@ Campos:
 | porcentajeDescuento | BigDecimal | No | Descuento entre 0 y 100. Si no se envía, se utiliza 0. |
 | detalles | List | Sí | Lista de productos. Debe contener al menos un detalle. |
 
-Cada elemento de `detalles` utiliza
-`DetalleVentaRequest`.
+Cada elemento de `detalles` utiliza `DetalleVentaRequest`.
 
 ### DetalleVentaRequest
 
@@ -276,8 +273,7 @@ Cada elemento de `detalles` utiliza
 | idProducto | Integer | Sí | ID del producto. |
 | cantidad | BigDecimal | Sí | Cantidad solicitada, mayor que cero. |
 
-Los precios y los importes no se reciben desde el
-cliente: se calculan en el servidor.
+Los precios y los importes no se reciben desde el cliente: se calculan en el servidor.
 
 ## 4. Registrar una venta
 
@@ -306,15 +302,15 @@ Encabezado:
 }
 ```
 
-El ejemplo supone que los productos 1 y 2 existen
-y tienen stock suficiente.
+El ejemplo supone que los productos 1 y 2 existen.
+
+La venta puede registrarse aunque alguno de los productos no tenga stock suficiente.
 
 ### Respuesta exitosa
 
 **201 Created**
 
-Ejemplo ilustrativo, suponiendo que el producto 1
-cuesta $1800 y el producto 2 cuesta $1200:
+Ejemplo ilustrativo, suponiendo que el producto 1 cuesta $1800 y el producto 2 cuesta $1200, con stock suficiente:
 
 ```json
 {
@@ -342,20 +338,43 @@ cuesta $1800 y el producto 2 cuesta $1200:
       "precio": 1200.00,
       "subtotal": 3600.00
     }
+  ],
+  "advertencias": []
+}
+```
+
+Los identificadores y la fecha son generados por el sistema y pueden variar.
+
+### Venta con stock insuficiente
+
+Cuando la cantidad solicitada supera el stock disponible, el backend registra la venta y devuelve **201 Created**.
+
+El stock puede quedar negativo y la respuesta incluye una advertencia.
+
+Por ejemplo, si el producto "Arroz 1kg" tiene 5 unidades y se venden 10, el stock final será -5.
+
+La respuesta incluirá, entre sus demás campos:
+
+```json
+{
+  "advertencias": [
+    "Advertencia: stock insuficiente para el producto Arroz 1kg. Stock anterior: 5.0, cantidad vendida: 10, stock restante: -5.0"
   ]
 }
 ```
 
-Los identificadores y la fecha son generados
-por el sistema y pueden variar.
+Este fragmento muestra únicamente el campo `advertencias`; la respuesta completa también contiene los datos de la venta y sus detalles.
+
+El frontend deberá mostrar estas advertencias al usuario.
+
+Las advertencias se generan al registrar la venta. En las consultas posteriores mediante GET, el campo `advertencias` se devuelve como una lista vacía, porque actualmente no se almacenan las advertencias históricas.
 
 ### Respuestas de error
 
-- 400 Bad Request: datos inválidos, lista vacía,
-  cantidad menor o igual a cero o descuento fuera
-  del rango permitido.
-- 404 Not Found: producto o cliente inexistente.
-- 409 Conflict: stock insuficiente.
+- **400 Bad Request:** datos inválidos, lista vacía, cantidad menor o igual a cero o descuento fuera del rango permitido.
+- **404 Not Found:** producto o cliente inexistente.
+
+El stock insuficiente no genera un error `409 Conflict` en el registro de ventas.
 
 ## 5. Listar ventas
 
@@ -369,7 +388,7 @@ Devuelve una lista de objetos `VentaResponse`.
 
 Si no existen ventas, devuelve una lista vacía.
 
-Cada venta incluye sus datos generales y sus detalles.
+Cada venta incluye sus datos generales, sus detalles y el campo `advertencias`, que actualmente se devuelve vacío en las consultas.
 
 ## 6. Buscar venta por ID
 
@@ -377,12 +396,12 @@ Cada venta incluye sus datos generales y sus detalles.
 
 Parámetro:
 
-- id: identificador de la venta.
+- `id`: identificador de la venta.
 
 ### Respuestas
 
-- 200 OK: devuelve la venta solicitada.
-- 404 Not Found: la venta no existe.
+- **200 OK:** devuelve la venta solicitada.
+- **404 Not Found:** la venta no existe.
 
 ## 7. Consultar detalles de una venta
 
@@ -390,8 +409,8 @@ Parámetro:
 
 ### Respuestas
 
-- 200 OK: devuelve los detalles asociados.
-- 404 Not Found: la venta no existe.
+- **200 OK:** devuelve los detalles asociados.
+- **404 Not Found:** la venta no existe.
 
 Ejemplo de respuesta:
 
@@ -410,15 +429,13 @@ Ejemplo de respuesta:
 
 ## 8. Reglas de cálculo
 
-Los cálculos monetarios se realizan utilizando
-`BigDecimal`.
+Los cálculos monetarios se realizan utilizando `BigDecimal`.
 
 ### Subtotal de cada detalle
 
-cantidad * precioVenta
+`cantidad * precioVenta`
 
-El resultado se redondea a dos decimales
-utilizando `RoundingMode.HALF_UP`.
+El resultado se redondea a dos decimales utilizando `RoundingMode.HALF_UP`.
 
 ### Subtotal de la venta
 
@@ -426,18 +443,17 @@ Suma de los subtotales de todos los detalles.
 
 ### Monto de descuento
 
-subtotalVenta * porcentajeDescuento / 100
+`subtotalVenta * porcentajeDescuento / 100`
 
-Se redondea a dos decimales con HALF_UP.
+Se redondea a dos decimales con `HALF_UP`.
 
 ### Total final
 
-total = subtotalVenta - montoDescuento
+`total = subtotalVenta - montoDescuento`
 
-Se expresa con dos decimales utilizando HALF_UP.
+Se expresa con dos decimales utilizando `HALF_UP`.
 
-El porcentaje de descuento debe estar entre
-0 y 100, inclusive.
+El porcentaje de descuento debe estar entre 0 y 100, inclusive.
 
 Si no se proporciona un descuento, se utiliza 0.
 
@@ -449,82 +465,87 @@ Antes de completar el registro, el sistema verifica:
 - Que cada detalle indique un producto.
 - Que la cantidad sea mayor que cero.
 - Que el producto exista.
-- Que exista stock suficiente.
+- Que el producto tenga un valor de stock definido.
 - Que el precio de venta sea válido.
 - Que el cliente exista, si se indicó uno.
 - Que el descuento esté entre 0 y 100.
 
-Si alguna validación falla, la venta no debe
-registrarse parcialmente.
+El stock insuficiente no impide registrar una venta. En ese caso se genera una advertencia.
+
+Si ocurre un error que provoca rollback, la transacción revierte las modificaciones realizadas.
 
 ## 10. Transacciones y stock
 
 El método de registro utiliza `@Transactional`.
 
-Dentro de la transacción se realizan las operaciones
-necesarias para registrar la venta y actualizar
-el stock.
+Dentro de la transacción se realizan las operaciones necesarias para registrar la venta y actualizar el stock.
 
-Si ocurre una excepción que provoca rollback,
-se revierten las modificaciones realizadas.
+Si ocurre una excepción que provoca rollback, se revierten las modificaciones realizadas.
 
 Se verificó mediante pruebas de integración que:
 
 - Una venta exitosa guarda la venta y sus detalles.
 - El stock se actualiza correctamente.
-- Una venta con stock insuficiente no se registra.
-- Si falla el segundo producto, se revierte el
-  descuento de stock del primero.
-- Si el mismo producto aparece repetido y la
-  cantidad acumulada supera el stock, se rechaza
-  la operación y se conserva el stock original.
+- Una venta con stock insuficiente se registra y puede dejar stock negativo.
+- Cuando el stock queda negativo, se genera una advertencia.
+- Si el mismo producto aparece repetido, se descuentan las cantidades de ambos detalles.
+- Cuando la cantidad acumulada supera el stock, la venta se registra y se conserva el stock negativo resultante.
 
 ### Limitación conocida
 
-No se ha implementado ni verificado todavía
-un mecanismo específico para impedir conflictos
-entre ventas simultáneas.
+No se ha implementado ni verificado todavía un mecanismo específico para impedir conflictos entre ventas simultáneas.
 
 Esta mejora queda pendiente.
 
 ## 11. Estado de verificación
 
-### Pruebas manuales realizadas con Postman
+### Pruebas manuales con Postman
+
+En las verificaciones manuales anteriores se habían probado los siguientes casos:
 
 - POST exitoso: 201 Created.
 - Producto inexistente: 404 Not Found.
 - Cliente inexistente: 404 Not Found.
-- Stock insuficiente: 409 Conflict.
 - Cantidad cero: 400 Bad Request.
 - Lista de detalles vacía: 400 Bad Request.
-- Consultas GET de ventas y detalles realizadas.
+- Consultas GET de ventas y detalles.
+
+**Pendiente de volver a comprobar manualmente:** el registro de una venta con stock insuficiente, que ahora debe devolver `201 Created` junto con una advertencia.
 
 ### Pruebas automatizadas
 
 `VentaServiceTest`
 
 - 7 pruebas unitarias aprobadas.
+- Incluye el registro de ventas con stock insuficiente y advertencias.
 
 `VentaIntegracionTest`
 
 - 3 pruebas de integración aprobadas.
-- Base de datos H2 en memoria.
-- Sin modificar los datos de MySQL.
+- Verifica stock negativo, advertencias y productos repetidos.
+- Utiliza una base de datos H2 en memoria, sin modificar los datos de MySQL.
 
 `AlmacenApplicationTests`
 
 - 2 pruebas aprobadas.
 - Verificada la conexión a H2.
 
+También se ejecutaron correctamente las pruebas de Productos:
+
+- `ProductoControllerTest`: 8 pruebas.
+- `ProductoServiceTest`: 8 pruebas.
+
 ### Estado actual
 
-Las pruebas mencionadas se ejecutaron
-correctamente por separado.
-
-Queda pendiente ejecutar la suite completa
-del proyecto mediante:
+Se ejecutó la suite completa mediante:
 
 `.\mvnw.cmd clean test`
 
-También queda pendiente preparar el commit
-y el Pull Request correspondiente al Issue #7.
+**Resultado: BUILD SUCCESS**
+
+- 28 pruebas ejecutadas.
+- 0 fallidas.
+- 0 errores.
+- 0 omitidas.
+
+Queda pendiente verificar manualmente la nueva respuesta de stock insuficiente mediante Postman, preparar el commit y subir los cambios a la rama `feature/backend-ventas` para actualizar el Pull Request correspondiente al Issue #7.
