@@ -3,29 +3,24 @@ package ies.belgrano.almacen.service;
 
 import ies.belgrano.almacen.dto.DetalleVentaRequest;
 import ies.belgrano.almacen.dto.DetalleVentaResponse;
-import ies.belgrano.almacen.dto.VentaRequest;
-import ies.belgrano.almacen.dto.VentaResponse;
-
 import ies.belgrano.almacen.exception.ResourceNotFoundException;
-
 import ies.belgrano.almacen.model.Cliente;
 import ies.belgrano.almacen.model.DetalleVenta;
 import ies.belgrano.almacen.model.Producto;
 import ies.belgrano.almacen.model.Venta;
-
 import ies.belgrano.almacen.repository.ClienteRepository;
 import ies.belgrano.almacen.repository.DetalleVentaRepository;
 import ies.belgrano.almacen.repository.ProductoRepository;
 import ies.belgrano.almacen.repository.VentaRepository;
-
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class VentaService {
@@ -47,25 +42,19 @@ public class VentaService {
                 this.clienteRepository = clienteRepository;
         }
 
+        // LISTAR TODAS LAS VENTAS
         @Transactional(readOnly = true)
-        public List<VentaResponse> listarTodas() {
-
-                List<VentaResponse> respuestas = new ArrayList<>();
-
-                for (Venta venta : ventaRepository.findAll()) {
-                        respuestas.add(convertirAResponse(venta));
-                }
-
-                return respuestas;
+        public List<Venta> listarTodas() {
+                return ventaRepository.findAll();
         }
 
+        // BUSCAR VENTA POR ID
         @Transactional(readOnly = true)
-        public Optional<VentaResponse> buscarPorId(Integer idVenta) {
-
-                return ventaRepository.findById(idVenta)
-                                .map(this::convertirAResponse);
+        public Optional<Venta> buscarPorId(Integer idVenta) {
+                return ventaRepository.findById(idVenta);
         }
 
+        // LISTAR DETALLES DE UNA VENTA
         @Transactional(readOnly = true)
         public List<DetalleVentaResponse> listarDetalles(Integer idVenta) {
 
@@ -76,129 +65,67 @@ public class VentaService {
 
                 List<DetalleVenta> detalles = detalleVentaRepository.findByVenta_IdVenta(idVenta);
 
-                List<DetalleVentaResponse> respuestas = new ArrayList<>();
+                List<DetalleVentaResponse> respuesta = new ArrayList<>();
 
                 for (DetalleVenta detalle : detalles) {
-                        respuestas.add(convertirDetalleAResponse(detalle));
+
+                        Producto producto = detalle.getProducto();
+
+                        DetalleVentaResponse dto = new DetalleVentaResponse(
+                                        detalle.getIdDetalle(),
+                                        producto.getIdProducto(),
+                                        producto.getNombre(),
+                                        detalle.getCantidad(),
+                                        detalle.getPrecio(),
+                                        detalle.getSubtotal());
+
+                        respuesta.add(dto);
                 }
 
-                return respuestas;
+                return respuesta;
         }
 
+        // REGISTRAR VENTA
         @Transactional
-        public VentaResponse registrarVenta(VentaRequest request) {
+        public Venta registrarVenta(
+                        Venta venta,
+                        List<DetalleVentaRequest> detalles) {
 
-                if (request == null
-                                || request.getDetalles() == null
-                                || request.getDetalles().isEmpty()) {
-
+                // Validar los datos generales
+                if (venta == null) {
                         throw new IllegalArgumentException(
-                                        "La venta debe tener al menos un detalle");
+                                        "Los datos de la venta son obligatorios.");
                 }
 
-                Venta venta = new Venta();
+                if (detalles == null || detalles.isEmpty()) {
+                        throw new IllegalArgumentException(
+                                        "La venta debe contener al menos un detalle.");
+                }
 
-                // Cliente opcional
-                if (request.getIdCliente() != null) {
+                if (venta.getIdVenta() != null) {
+                        throw new IllegalArgumentException(
+                                        "No debe enviarse un identificador al registrar una venta nueva.");
+                }
 
-                        Cliente cliente = clienteRepository
-                                        .findById(request.getIdCliente())
+                // Buscar cliente, si fue indicado
+                if (venta.getCliente() != null) {
+
+                        Integer idCliente = venta.getCliente().getIdCliente();
+
+                        if (idCliente == null) {
+                                throw new IllegalArgumentException(
+                                                "El identificador del cliente es obligatorio.");
+                        }
+
+                        Cliente cliente = clienteRepository.findById(idCliente)
                                         .orElseThrow(() -> new ResourceNotFoundException(
-                                                        "Cliente no encontrado: "
-                                                                        + request.getIdCliente()));
+                                                        "Cliente no encontrado: " + idCliente));
 
                         venta.setCliente(cliente);
                 }
 
-                List<DetalleVenta> detalles = new ArrayList<>();
-                List<String> advertencias = new ArrayList<>();
-
-                BigDecimal subtotalVenta = BigDecimal.ZERO;
-
-                for (DetalleVentaRequest detalleRequest : request.getDetalles()) {
-
-                        // Validar los datos del detalle
-                        if (detalleRequest == null
-                                        || detalleRequest.getIdProducto() == null
-                                        || detalleRequest.getCantidad() == null
-                                        || detalleRequest.getCantidad()
-                                                        .compareTo(BigDecimal.ZERO) <= 0) {
-
-                                throw new IllegalArgumentException(
-                                                "El detalle debe tener un producto y una cantidad mayor a cero");
-                        }
-
-                        Integer idProducto = detalleRequest.getIdProducto();
-
-                        // Buscar producto
-                        Producto producto = productoRepository
-                                        .findById(idProducto)
-                                        .orElseThrow(() -> new ResourceNotFoundException(
-                                                        "Producto no encontrado: " + idProducto));
-
-                        BigDecimal cantidad = detalleRequest.getCantidad();
-
-                        // Validar que el stock esté definido
-                        if (producto.getStock() == null) {
-
-                                throw new IllegalArgumentException(
-                                                "El producto no tiene stock definido: "
-                                                                + producto.getNombre());
-                        }
-
-                        BigDecimal stockDisponible = BigDecimal.valueOf(producto.getStock());
-
-                        // Obtener precio desde la base de datos
-                        BigDecimal precio = producto.getPrecioVenta();
-
-                        if (precio == null
-                                        || precio.compareTo(BigDecimal.ZERO) < 0) {
-
-                                throw new IllegalArgumentException(
-                                                "Precio de venta inválido para el producto: "
-                                                                + producto.getNombre());
-                        }
-
-                        // Calcular subtotal del detalle
-                        BigDecimal subtotalDetalle = cantidad
-                                        .multiply(precio)
-                                        .setScale(2, RoundingMode.HALF_UP);
-
-                        DetalleVenta detalle = new DetalleVenta();
-
-                        detalle.setProducto(producto);
-                        detalle.setCantidad(cantidad);
-                        detalle.setPrecio(precio);
-                        detalle.setSubtotal(subtotalDetalle);
-
-                        detalles.add(detalle);
-
-                        subtotalVenta = subtotalVenta.add(subtotalDetalle);
-
-                        // Actualizar stock, permitiendo valores negativos
-                        BigDecimal nuevoStock = stockDisponible.subtract(cantidad);
-
-                        // Si se vende más de lo disponible, generar advertencia
-                        if (nuevoStock.compareTo(BigDecimal.ZERO) < 0) {
-
-                                advertencias.add(
-                                                "Advertencia: stock insuficiente para el producto "
-                                                                + producto.getNombre()
-                                                                + ". Stock anterior: "
-                                                                + stockDisponible.toPlainString()
-                                                                + ", cantidad vendida: "
-                                                                + cantidad.toPlainString()
-                                                                + ", stock restante: "
-                                                                + nuevoStock.toPlainString());
-                        }
-
-                        producto.setStock(nuevoStock.doubleValue());
-
-                        productoRepository.save(producto);
-                }
-
-                // Validar porcentaje de descuento
-                BigDecimal porcentajeDescuento = request.getPorcentajeDescuento();
+                // Porcentaje de descuento: 0% por defecto
+                BigDecimal porcentajeDescuento = venta.getPorcentajeDescuento();
 
                 if (porcentajeDescuento == null) {
                         porcentajeDescuento = BigDecimal.ZERO;
@@ -209,105 +136,147 @@ public class VentaService {
                                                 new BigDecimal("100")) > 0) {
 
                         throw new IllegalArgumentException(
-                                        "El porcentaje de descuento debe estar entre 0 y 100");
+                                        "El porcentaje de descuento debe estar entre 0 y 100.");
                 }
 
-                // Calcular descuento
+                porcentajeDescuento = porcentajeDescuento.setScale(2, RoundingMode.HALF_UP);
+
+                // Preparar detalles y calcular subtotal
+                List<DetalleVenta> detallesPreparados = new ArrayList<>();
+
+                BigDecimal subtotalVenta = BigDecimal.ZERO;
+
+                for (DetalleVentaRequest entrada : detalles) {
+
+                        // Validar producto y cantidad
+                        if (entrada == null
+                                        || entrada.getIdProducto() == null
+                                        || entrada.getIdProducto() <= 0
+                                        || entrada.getCantidad() == null
+                                        || entrada.getCantidad().signum() <= 0) {
+
+                                throw new IllegalArgumentException(
+                                                "Cada detalle debe tener un producto válido "
+                                                                + "y una cantidad positiva.");
+                        }
+
+                        Producto producto = productoRepository
+                                        .findById(entrada.getIdProducto())
+                                        .orElseThrow(() -> new ResourceNotFoundException(
+                                                        "Producto no encontrado: "
+                                                                        + entrada.getIdProducto()));
+
+                        // Validar precio
+                        if (producto.getPrecioVenta() == null
+                                        || producto.getPrecioVenta().signum() < 0) {
+
+                                throw new IllegalArgumentException(
+                                                "El producto no tiene un precio de venta válido.");
+                        }
+
+                        // Validar stock
+                        if (producto.getStock() == null
+                                        || !Double.isFinite(producto.getStock())) {
+
+                                throw new IllegalArgumentException(
+                                                "El producto no tiene un stock válido.");
+                        }
+
+                        // Validar cantidad: máximo 3 decimales
+                        BigDecimal cantidad;
+
+                        try {
+                                cantidad = entrada.getCantidad()
+                                                .setScale(3, RoundingMode.UNNECESSARY);
+                        } catch (ArithmeticException ex) {
+                                throw new IllegalArgumentException(
+                                                "La cantidad no puede tener más de 3 decimales significativos.");
+                        }
+
+                        if (cantidad.precision() > 12) {
+                                throw new IllegalArgumentException(
+                                                "La cantidad admite hasta 9 dígitos enteros.");
+                        }
+
+                        // Validar precio: máximo 2 decimales
+                        BigDecimal precio;
+
+                        try {
+                                precio = producto.getPrecioVenta()
+                                                .setScale(2, RoundingMode.UNNECESSARY);
+                        } catch (ArithmeticException ex) {
+                                throw new IllegalArgumentException(
+                                                "El precio del producto debe admitir como máximo 2 decimales.");
+                        }
+
+                        if (precio.precision() > 12) {
+                                throw new IllegalArgumentException(
+                                                "El precio del producto excede el rango admitido.");
+                        }
+
+                        // Calcular subtotal del detalle
+                        BigDecimal subtotalDetalle = cantidad.multiply(precio)
+                                        .setScale(2, RoundingMode.HALF_UP);
+
+                        if (subtotalDetalle.precision() > 12) {
+                                throw new IllegalArgumentException(
+                                                "El subtotal del detalle excede el rango admitido.");
+                        }
+
+                        subtotalVenta = subtotalVenta.add(subtotalDetalle);
+
+                        if (subtotalVenta.precision() > 12) {
+                                throw new IllegalArgumentException(
+                                                "El subtotal de la venta excede el rango admitido.");
+                        }
+
+                        // Actualizar stock
+                        double cantidadVendida = cantidad.doubleValue();
+                        double nuevoStock = producto.getStock() - cantidadVendida;
+
+                        if (!Double.isFinite(nuevoStock)) {
+                                throw new IllegalArgumentException(
+                                                "La cantidad excede el rango admitido para el stock.");
+                        }
+
+                        producto.setStock(nuevoStock);
+                        productoRepository.save(producto);
+
+                        // Preparar detalle
+                        DetalleVenta detalle = new DetalleVenta();
+
+                        detalle.setProducto(producto);
+                        detalle.setCantidad(cantidad);
+                        detalle.setPrecio(precio);
+                        detalle.setSubtotal(subtotalDetalle);
+
+                        detallesPreparados.add(detalle);
+                }
+
+                // Calcular descuento y total
                 BigDecimal montoDescuento = subtotalVenta
                                 .multiply(porcentajeDescuento)
-                                .divide(
-                                                new BigDecimal("100"),
-                                                2,
-                                                RoundingMode.HALF_UP);
+                                .divide(new BigDecimal("100"), 2, RoundingMode.HALF_UP);
 
-                // Calcular total
                 BigDecimal total = subtotalVenta
                                 .subtract(montoDescuento)
                                 .setScale(2, RoundingMode.HALF_UP);
 
-                venta.setSubtotal(
-                                subtotalVenta.setScale(2, RoundingMode.HALF_UP));
-
-                venta.setPorcentajeDescuento(
-                                porcentajeDescuento.setScale(2, RoundingMode.HALF_UP));
-
+                // Establecer importes calculados
+                venta.setSubtotal(subtotalVenta.setScale(2, RoundingMode.HALF_UP));
+                venta.setPorcentajeDescuento(porcentajeDescuento);
                 venta.setMontoDescuento(montoDescuento);
                 venta.setTotal(total);
 
-                // Guardar venta
+                // Guardar venta con importes completos
                 Venta ventaGuardada = ventaRepository.save(venta);
 
-                // Guardar detalles
-                for (DetalleVenta detalle : detalles) {
-
+                // Guardar los detalles asociados
+                for (DetalleVenta detalle : detallesPreparados) {
                         detalle.setVenta(ventaGuardada);
-
                         detalleVentaRepository.save(detalle);
                 }
 
-                // Preparar respuesta con advertencias
-                VentaResponse respuesta = convertirAResponse(ventaGuardada);
-                respuesta.setAdvertencias(advertencias);
-
-                return respuesta;
-        }
-
-        private VentaResponse convertirAResponse(Venta venta) {
-
-                VentaResponse respuesta = new VentaResponse();
-
-                respuesta.setIdVenta(venta.getIdVenta());
-                respuesta.setFecha(venta.getFecha());
-
-                if (venta.getCliente() != null) {
-                        respuesta.setIdCliente(
-                                        venta.getCliente().getIdCliente());
-                }
-
-                respuesta.setSubtotal(venta.getSubtotal());
-
-                respuesta.setPorcentajeDescuento(
-                                venta.getPorcentajeDescuento());
-
-                respuesta.setMontoDescuento(
-                                venta.getMontoDescuento());
-
-                respuesta.setTotal(venta.getTotal());
-
-                List<DetalleVentaResponse> detalles = new ArrayList<>();
-
-                List<DetalleVenta> detallesGuardados = detalleVentaRepository.findByVenta_IdVenta(
-                                venta.getIdVenta());
-
-                for (DetalleVenta detalle : detallesGuardados) {
-                        detalles.add(convertirDetalleAResponse(detalle));
-                }
-
-                respuesta.setDetalles(detalles);
-
-                // Las consultas no reconstruyen advertencias históricas
-                respuesta.setAdvertencias(new ArrayList<>());
-
-                return respuesta;
-        }
-
-        private DetalleVentaResponse convertirDetalleAResponse(
-                        DetalleVenta detalle) {
-
-                DetalleVentaResponse respuesta = new DetalleVentaResponse();
-
-                respuesta.setIdDetalle(detalle.getIdDetalle());
-
-                respuesta.setIdProducto(
-                                detalle.getProducto().getIdProducto());
-
-                respuesta.setNombreProducto(
-                                detalle.getProducto().getNombre());
-
-                respuesta.setCantidad(detalle.getCantidad());
-                respuesta.setPrecio(detalle.getPrecio());
-                respuesta.setSubtotal(detalle.getSubtotal());
-
-                return respuesta;
+                return ventaGuardada;
         }
 }

@@ -1,16 +1,13 @@
 
 package ies.belgrano.almacen.service;
 
-import ies.belgrano.almacen.dto.VentaRequest;
 import ies.belgrano.almacen.dto.DetalleVentaRequest;
-import ies.belgrano.almacen.dto.VentaResponse;
-
+import ies.belgrano.almacen.dto.VentaRequest;
 import ies.belgrano.almacen.exception.ResourceNotFoundException;
-
+import ies.belgrano.almacen.model.Cliente;
+import ies.belgrano.almacen.model.DetalleVenta;
 import ies.belgrano.almacen.model.Producto;
 import ies.belgrano.almacen.model.Venta;
-import ies.belgrano.almacen.model.DetalleVenta;
-
 import ies.belgrano.almacen.repository.ClienteRepository;
 import ies.belgrano.almacen.repository.DetalleVentaRepository;
 import ies.belgrano.almacen.repository.ProductoRepository;
@@ -19,6 +16,7 @@ import ies.belgrano.almacen.repository.VentaRepository;
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -26,256 +24,159 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.*;
 
 class VentaServiceTest {
 
-        // PRUEBA 1: Venta sin productos.
+        private VentaRepository ventaRepository;
+        private DetalleVentaRepository detalleVentaRepository;
+        private ProductoRepository productoRepository;
+        private ClienteRepository clienteRepository;
+        private VentaService ventaService;
 
-        @Test
-        void validar_ventaSinDetallesGeneraError() {
+        @BeforeEach
+        void configurar() {
+                ventaRepository = mock(VentaRepository.class);
+                detalleVentaRepository = mock(DetalleVentaRepository.class);
+                productoRepository = mock(ProductoRepository.class);
+                clienteRepository = mock(ClienteRepository.class);
 
-                VentaRequest request = new VentaRequest();
-
-                request.setIdCliente(null);
-                request.setPorcentajeDescuento(BigDecimal.ZERO);
-                request.setDetalles(List.of());
-
-                try (var factory = Validation.buildDefaultValidatorFactory()) {
-
-                        Validator validator = factory.getValidator();
-
-                        var errores = validator.validate(request);
-
-                        assertEquals(1, errores.size());
-                }
-        }
-
-        // PRUEBA 2: Cantidad igual a cero.
-
-        @Test
-        void validar_cantidadCeroGeneraError() {
-
-                DetalleVentaRequest detalle = new DetalleVentaRequest();
-
-                detalle.setIdProducto(1);
-                detalle.setCantidad(BigDecimal.ZERO);
-
-                VentaRequest request = new VentaRequest();
-
-                request.setIdCliente(null);
-                request.setPorcentajeDescuento(BigDecimal.ZERO);
-                request.setDetalles(List.of(detalle));
-
-                try (var factory = Validation.buildDefaultValidatorFactory()) {
-
-                        Validator validator = factory.getValidator();
-
-                        var errores = validator.validate(request);
-
-                        assertEquals(1, errores.size());
-                }
-        }
-
-        // PRUEBA 3: La venta supera el stock, pero se registra con advertencia.
-
-        @Test
-        void registrarVenta_stockInsuficientePermiteVentaYAdvierte() {
-
-                VentaRepository ventaRepository = mock(VentaRepository.class);
-                DetalleVentaRepository detalleVentaRepository = mock(DetalleVentaRepository.class);
-                ProductoRepository productoRepository = mock(ProductoRepository.class);
-                ClienteRepository clienteRepository = mock(ClienteRepository.class);
-
-                VentaService ventaService = new VentaService(
+                ventaService = new VentaService(
                                 ventaRepository,
                                 detalleVentaRepository,
                                 productoRepository,
                                 clienteRepository);
 
-                Producto producto = new Producto();
-                producto.setIdProducto(1);
-                producto.setNombre("Arroz 1kg");
-                producto.setPrecioVenta(new BigDecimal("1800.00"));
-                producto.setStock(5.0);
-
-                when(productoRepository.findById(1))
-                                .thenReturn(Optional.of(producto));
-
-                // Simulamos la persistencia: Mockito devuelve la venta con su ID.
+                // Simulamos el guardado de una venta.
                 when(ventaRepository.save(any(Venta.class)))
                                 .thenAnswer(invocacion -> {
                                         Venta venta = invocacion.getArgument(0);
                                         venta.setIdVenta(1);
                                         return venta;
                                 });
+        }
 
-                List<DetalleVenta> detallesGuardados = new ArrayList<>();
-                when(detalleVentaRepository.save(any(DetalleVenta.class)))
-                                .thenAnswer(invocacion -> {
-                                        DetalleVenta detalleGuardado = invocacion.getArgument(0);
-                                        detalleGuardado.setIdDetalle(detallesGuardados.size() + 1);
-                                        detallesGuardados.add(detalleGuardado);
-                                        return detalleGuardado;
-                                });
-                when(detalleVentaRepository.findByVenta_IdVenta(1))
-                                .thenAnswer(invocacion -> new ArrayList<>(detallesGuardados));
-
-                DetalleVentaRequest detalle = new DetalleVentaRequest();
-                detalle.setIdProducto(1);
-                detalle.setCantidad(new BigDecimal("10"));
+        // PRUEBA 1: No se puede registrar una venta sin detalles.
+        @Test
+        void validar_ventaSinDetallesGeneraError() {
 
                 VentaRequest request = new VentaRequest();
-                request.setIdCliente(null);
-                request.setPorcentajeDescuento(BigDecimal.ZERO);
+                request.setVenta(new Venta());
+                request.setDetalles(List.of());
+
+                try (var factory = Validation.buildDefaultValidatorFactory()) {
+                        Validator validator = factory.getValidator();
+
+                        var errores = validator.validate(request);
+
+                        assertEquals(1, errores.size());
+                }
+        }
+
+        // PRUEBA 2: La cantidad de un detalle debe ser positiva.
+        @Test
+        void validar_cantidadCeroGeneraError() {
+
+                DetalleVentaRequest detalle = crearDetalle(1, "0");
+
+                VentaRequest request = new VentaRequest();
+                request.setVenta(new Venta());
                 request.setDetalles(List.of(detalle));
 
-                VentaResponse respuesta = ventaService.registrarVenta(request);
+                try (var factory = Validation.buildDefaultValidatorFactory()) {
+                        Validator validator = factory.getValidator();
+
+                        var errores = validator.validate(request);
+
+                        assertEquals(1, errores.size());
+                }
+        }
+
+        // PRUEBA 3: El stock puede quedar negativo.
+        @Test
+        void registrarVenta_stockInsuficientePermiteVenta() {
+
+                Producto producto = crearProducto(
+                                1, "Arroz 1kg", "1800.00", 5.0);
+
+                when(productoRepository.findById(1))
+                                .thenReturn(Optional.of(producto));
+
+                List<DetalleVenta> detallesGuardados = prepararDetallesSimulados();
+
+                Venta venta = new Venta();
+                venta.setPorcentajeDescuento(BigDecimal.ZERO);
+
+                DetalleVentaRequest detalle = crearDetalle(1, "10");
+
+                Venta respuesta = ventaService.registrarVenta(
+                                venta, List.of(detalle));
 
                 assertEquals(1, respuesta.getIdVenta());
-                assertEquals(0, new BigDecimal("18000.00").compareTo(respuesta.getTotal()));
+                assertImporte("18000.00", respuesta.getTotal());
                 assertEquals(-5.0, producto.getStock());
-                assertEquals(1, respuesta.getDetalles().size());
-                assertNotNull(respuesta.getAdvertencias());
-                assertEquals(1, respuesta.getAdvertencias().size());
-                assertTrue(respuesta.getAdvertencias().get(0).contains("Arroz 1kg"));
-                assertTrue(respuesta.getAdvertencias().get(0).contains("-5"));
+
+                assertEquals(1, detallesGuardados.size());
+                assertImporte(
+                                "18000.00",
+                                detallesGuardados.get(0).getSubtotal());
 
                 verify(ventaRepository).save(any(Venta.class));
                 verify(detalleVentaRepository).save(any(DetalleVenta.class));
                 verify(productoRepository).save(producto);
         }
 
-        // PRUEBA 4: Calcular total y descontar stock.
-
+        // PRUEBA 4: Calcular descuento, total y actualizar stock.
         @Test
         void registrarVenta_calculaTotalYDescuentaStock() {
 
-                VentaRepository ventaRepository = mock(VentaRepository.class);
-
-                DetalleVentaRepository detalleVentaRepository = mock(DetalleVentaRepository.class);
-
-                ProductoRepository productoRepository = mock(ProductoRepository.class);
-
-                ClienteRepository clienteRepository = mock(ClienteRepository.class);
-
-                VentaService ventaService = new VentaService(
-                                ventaRepository,
-                                detalleVentaRepository,
-                                productoRepository,
-                                clienteRepository);
-
-                Producto producto = new Producto();
-
-                producto.setIdProducto(1);
-                producto.setNombre("Arroz 1kg");
-                producto.setPrecioVenta(new BigDecimal("1800.00"));
-                producto.setStock(5.0);
+                Producto producto = crearProducto(
+                                1, "Arroz 1kg", "1800.00", 5.0);
 
                 when(productoRepository.findById(1))
                                 .thenReturn(Optional.of(producto));
 
-                when(ventaRepository.save(any(Venta.class)))
-                                .thenAnswer(invocacion -> {
-                                        Venta venta = invocacion.getArgument(0);
-                                        venta.setIdVenta(1);
-                                        return venta;
-                                });
+                List<DetalleVenta> detallesGuardados = prepararDetallesSimulados();
 
-                when(detalleVentaRepository.save(any(DetalleVenta.class)))
-                                .thenAnswer(invocacion -> {
-                                        DetalleVenta detalleGuardado = invocacion.getArgument(0);
-                                        detalleGuardado.setIdDetalle(1);
-                                        return detalleGuardado;
-                                });
+                Venta venta = new Venta();
+                venta.setPorcentajeDescuento(new BigDecimal("10"));
 
-                when(detalleVentaRepository.findByVenta_IdVenta(1))
-                                .thenReturn(List.of());
+                DetalleVentaRequest detalle = crearDetalle(1, "2");
 
-                DetalleVentaRequest detalle = new DetalleVentaRequest();
+                Venta respuesta = ventaService.registrarVenta(
+                                venta, List.of(detalle));
 
-                detalle.setIdProducto(1);
-                detalle.setCantidad(new BigDecimal("2"));
-
-                VentaRequest request = new VentaRequest();
-
-                request.setIdCliente(null);
-                request.setPorcentajeDescuento(new BigDecimal("10"));
-                request.setDetalles(List.of(detalle));
-
-                VentaResponse respuesta = ventaService.registrarVenta(request);
-
-                assertEquals(
-                                0,
-                                new BigDecimal("3600.00")
-                                                .compareTo(respuesta.getSubtotal()));
-
-                assertEquals(
-                                0,
-                                new BigDecimal("360.00")
-                                                .compareTo(respuesta.getMontoDescuento()));
-
-                assertEquals(
-                                0,
-                                new BigDecimal("3240.00")
-                                                .compareTo(respuesta.getTotal()));
+                assertImporte("3600.00", respuesta.getSubtotal());
+                assertImporte("10.00", respuesta.getPorcentajeDescuento());
+                assertImporte("360.00", respuesta.getMontoDescuento());
+                assertImporte("3240.00", respuesta.getTotal());
 
                 assertEquals(3.0, producto.getStock());
-                assertNotNull(respuesta.getAdvertencias());
-                assertTrue(respuesta.getAdvertencias().isEmpty());
+                assertEquals(1, detallesGuardados.size());
 
                 verify(ventaRepository).save(any(Venta.class));
-                verify(detalleVentaRepository)
-                                .save(any(DetalleVenta.class));
+                verify(detalleVentaRepository).save(any(DetalleVenta.class));
                 verify(productoRepository).save(producto);
         }
 
-        // PRUEBA 5: Producto inexistente.
-
+        // PRUEBA 5: No se puede vender un producto inexistente.
         @Test
         void registrarVenta_productoInexistenteGeneraError() {
-
-                VentaRepository ventaRepository = mock(VentaRepository.class);
-
-                DetalleVentaRepository detalleVentaRepository = mock(DetalleVentaRepository.class);
-
-                ProductoRepository productoRepository = mock(ProductoRepository.class);
-
-                ClienteRepository clienteRepository = mock(ClienteRepository.class);
-
-                VentaService ventaService = new VentaService(
-                                ventaRepository,
-                                detalleVentaRepository,
-                                productoRepository,
-                                clienteRepository);
 
                 when(productoRepository.findById(9999))
                                 .thenReturn(Optional.empty());
 
-                DetalleVentaRequest detalle = new DetalleVentaRequest();
+                Venta venta = new Venta();
+                venta.setPorcentajeDescuento(BigDecimal.ZERO);
 
-                detalle.setIdProducto(9999);
-                detalle.setCantidad(new BigDecimal("1"));
-
-                VentaRequest request = new VentaRequest();
-
-                request.setIdCliente(null);
-                request.setPorcentajeDescuento(BigDecimal.ZERO);
-                request.setDetalles(List.of(detalle));
+                DetalleVentaRequest detalle = crearDetalle(9999, "1");
 
                 ResourceNotFoundException error = assertThrows(
                                 ResourceNotFoundException.class,
-                                () -> ventaService.registrarVenta(request));
+                                () -> ventaService.registrarVenta(
+                                                venta, List.of(detalle)));
 
                 assertEquals(
                                 "Producto no encontrado: 9999",
@@ -286,42 +187,26 @@ class VentaServiceTest {
                 verify(productoRepository, never()).save(any());
         }
 
-        // PRUEBA 6: Cliente inexistente.
-
+        // PRUEBA 6: No se puede asociar un cliente inexistente.
         @Test
         void registrarVenta_clienteInexistenteGeneraError() {
-
-                VentaRepository ventaRepository = mock(VentaRepository.class);
-
-                DetalleVentaRepository detalleVentaRepository = mock(DetalleVentaRepository.class);
-
-                ProductoRepository productoRepository = mock(ProductoRepository.class);
-
-                ClienteRepository clienteRepository = mock(ClienteRepository.class);
-
-                VentaService ventaService = new VentaService(
-                                ventaRepository,
-                                detalleVentaRepository,
-                                productoRepository,
-                                clienteRepository);
 
                 when(clienteRepository.findById(9999))
                                 .thenReturn(Optional.empty());
 
-                DetalleVentaRequest detalle = new DetalleVentaRequest();
+                Cliente cliente = new Cliente();
+                cliente.setIdCliente(9999);
 
-                detalle.setIdProducto(1);
-                detalle.setCantidad(BigDecimal.ONE);
+                Venta venta = new Venta();
+                venta.setCliente(cliente);
+                venta.setPorcentajeDescuento(BigDecimal.ZERO);
 
-                VentaRequest request = new VentaRequest();
-
-                request.setIdCliente(9999);
-                request.setPorcentajeDescuento(BigDecimal.ZERO);
-                request.setDetalles(List.of(detalle));
+                DetalleVentaRequest detalle = crearDetalle(1, "1");
 
                 ResourceNotFoundException error = assertThrows(
                                 ResourceNotFoundException.class,
-                                () -> ventaService.registrarVenta(request));
+                                () -> ventaService.registrarVenta(
+                                                venta, List.of(detalle)));
 
                 assertEquals(
                                 "Cliente no encontrado: 9999",
@@ -332,132 +217,97 @@ class VentaServiceTest {
                 verify(productoRepository, never()).save(any());
         }
 
-        // PRUEBA 7:
-        // Registrar una venta con dos productos diferentes.
-
+        // PRUEBA 7: Registrar dos productos y calcular el total.
         @Test
         void registrarVenta_dosProductosCalculaTotalYActualizaStock() {
 
-                // Repositorios simulados.
-                VentaRepository ventaRepository = mock(VentaRepository.class);
+                Producto arroz = crearProducto(
+                                1, "Arroz 1kg", "1800.00", 10.0);
 
-                DetalleVentaRepository detalleVentaRepository = mock(DetalleVentaRepository.class);
+                Producto azucar = crearProducto(
+                                2, "Azucar 1kg", "1200.00", 8.0);
 
-                ProductoRepository productoRepository = mock(ProductoRepository.class);
-
-                ClienteRepository clienteRepository = mock(ClienteRepository.class);
-
-                VentaService ventaService = new VentaService(
-                                ventaRepository,
-                                detalleVentaRepository,
-                                productoRepository,
-                                clienteRepository);
-
-                // Producto 1: Arroz.
-                Producto arroz = new Producto();
-
-                arroz.setIdProducto(1);
-                arroz.setNombre("Arroz 1kg");
-                arroz.setPrecioVenta(new BigDecimal("1800.00"));
-                arroz.setStock(10.0);
-
-                // Producto 2: Azúcar.
-                Producto azucar = new Producto();
-
-                azucar.setIdProducto(2);
-                azucar.setNombre("Azúcar 1kg");
-                azucar.setPrecioVenta(new BigDecimal("1200.00"));
-                azucar.setStock(8.0);
-
-                // Simulamos las búsquedas de los productos.
                 when(productoRepository.findById(1))
                                 .thenReturn(Optional.of(arroz));
 
                 when(productoRepository.findById(2))
                                 .thenReturn(Optional.of(azucar));
 
-                // Simulamos que la venta recibe ID 1.
-                when(ventaRepository.save(any(Venta.class)))
-                                .thenAnswer(invocacion -> {
-                                        Venta venta = invocacion.getArgument(0);
-                                        venta.setIdVenta(1);
-                                        return venta;
-                                });
+                List<DetalleVenta> detallesGuardados = prepararDetallesSimulados();
 
-                // Guardamos los detalles simulados en una lista.
-                List<DetalleVenta> detallesGuardados = new ArrayList<>();
+                Venta venta = new Venta();
+                venta.setPorcentajeDescuento(BigDecimal.ZERO);
 
-                when(detalleVentaRepository.save(any(DetalleVenta.class)))
-                                .thenAnswer(invocacion -> {
-                                        DetalleVenta detalleGuardado = invocacion.getArgument(0);
+                DetalleVentaRequest detalleArroz = crearDetalle(1, "2");
+                DetalleVentaRequest detalleAzucar = crearDetalle(2, "3");
 
-                                        detalleGuardado.setIdDetalle(
-                                                        detallesGuardados.size() + 1);
+                Venta respuesta = ventaService.registrarVenta(
+                                venta, List.of(detalleArroz, detalleAzucar));
 
-                                        detallesGuardados.add(detalleGuardado);
+                assertImporte("7200.00", respuesta.getSubtotal());
+                assertImporte("0.00", respuesta.getMontoDescuento());
+                assertImporte("7200.00", respuesta.getTotal());
 
-                                        return detalleGuardado;
-                                });
-
-                // Simulamos la consulta de los detalles guardados.
-                when(detalleVentaRepository.findByVenta_IdVenta(1))
-                                .thenAnswer(invocacion -> new ArrayList<>(detallesGuardados));
-
-                // Detalle 1: dos unidades de arroz.
-                DetalleVentaRequest detalleArroz = new DetalleVentaRequest();
-
-                detalleArroz.setIdProducto(1);
-                detalleArroz.setCantidad(new BigDecimal("2"));
-
-                // Detalle 2: tres unidades de azúcar.
-                DetalleVentaRequest detalleAzucar = new DetalleVentaRequest();
-
-                detalleAzucar.setIdProducto(2);
-                detalleAzucar.setCantidad(new BigDecimal("3"));
-
-                // Creamos la venta.
-                VentaRequest request = new VentaRequest();
-
-                request.setIdCliente(null);
-                request.setPorcentajeDescuento(BigDecimal.ZERO);
-                request.setDetalles(
-                                List.of(detalleArroz, detalleAzucar));
-
-                // Registramos la venta.
-                VentaResponse respuesta = ventaService.registrarVenta(request);
-
-                // Subtotal esperado: 3600 + 3600 = 7200.
-                assertEquals(
-                                0,
-                                new BigDecimal("7200.00")
-                                                .compareTo(respuesta.getSubtotal()));
-
-                // Sin descuento, el total también debe ser 7200.
-                assertEquals(
-                                0,
-                                new BigDecimal("7200.00")
-                                                .compareTo(respuesta.getTotal()));
-
-                // Verificamos el stock final.
                 assertEquals(8.0, arroz.getStock());
                 assertEquals(5.0, azucar.getStock());
-                assertNotNull(respuesta.getAdvertencias());
-                assertTrue(respuesta.getAdvertencias().isEmpty());
 
-                // Comprobamos que se guardaron dos detalles.
                 assertEquals(2, detallesGuardados.size());
 
-                // Comprobamos que la respuesta incluye dos detalles.
-                assertNotNull(respuesta.getDetalles());
-                assertEquals(2, respuesta.getDetalles().size());
-
-                // Verificamos las llamadas a los repositorios.
                 verify(ventaRepository).save(any(Venta.class));
-
                 verify(detalleVentaRepository, times(2))
                                 .save(any(DetalleVenta.class));
 
                 verify(productoRepository).save(arroz);
                 verify(productoRepository).save(azucar);
+        }
+
+        // MÉTODOS AUXILIARES PARA LAS PRUEBAS
+
+        private Producto crearProducto(
+                        Integer id,
+                        String nombre,
+                        String precio,
+                        Double stock) {
+
+                Producto producto = new Producto();
+                producto.setIdProducto(id);
+                producto.setNombre(nombre);
+                producto.setPrecioVenta(new BigDecimal(precio));
+                producto.setStock(stock);
+
+                return producto;
+        }
+
+        private DetalleVentaRequest crearDetalle(
+                        Integer idProducto,
+                        String cantidad) {
+
+                DetalleVentaRequest detalle = new DetalleVentaRequest();
+                detalle.setIdProducto(idProducto);
+                detalle.setCantidad(new BigDecimal(cantidad));
+
+                return detalle;
+        }
+
+        private List<DetalleVenta> prepararDetallesSimulados() {
+
+                List<DetalleVenta> detallesGuardados = new ArrayList<>();
+
+                when(detalleVentaRepository.save(any(DetalleVenta.class)))
+                                .thenAnswer(invocacion -> {
+                                        DetalleVenta detalle = invocacion.getArgument(0);
+                                        detalle.setIdDetalle(detallesGuardados.size() + 1);
+                                        detallesGuardados.add(detalle);
+                                        return detalle;
+                                });
+
+                return detallesGuardados;
+        }
+
+        private void assertImporte(String esperado, BigDecimal obtenido) {
+                assertNotNull(obtenido);
+                assertEquals(
+                                0,
+                                new BigDecimal(esperado).compareTo(obtenido));
         }
 }

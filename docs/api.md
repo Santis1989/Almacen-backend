@@ -225,70 +225,187 @@ siguen pendientes de confirmación.
 - Pruebas HTTP de los endpoints: pendientes.
 - Verificación de restricciones MySQL: pendiente.
 ```
+# API REST — Detalles de venta (issue #8)
 
+## Alcance
 
----
+Los detalles se registran dentro del POST de ventas y de su misma
+transacción. No se agregan operaciones CRUD independientes para detalles.
 
-# API REST - Módulo de Ventas
+Las relaciones con Venta y Producto son obligatorias y se representan
+en la entidad mediante asociaciones JPA.
 
-## 1. Descripción general
+## Entrada de cada detalle
 
-El módulo Ventas permite registrar y consultar ventas realizadas en el sistema de almacén.
+DetalleVentaRequest contiene únicamente:
 
-Cada venta puede incluir uno o varios productos y puede estar asociada a un cliente o realizarse sin cliente registrado.
-
-El backend se encarga de:
-
-- Validar los productos y sus cantidades.
-- Consultar el stock disponible y generar advertencias cuando resulte insuficiente.
-- Permitir registrar ventas aunque el stock quede negativo.
-- Obtener los precios desde la base de datos.
-- Calcular subtotal, descuento y total.
-- Descontar el stock de los productos vendidos.
-- Guardar la venta y sus detalles.
-- Revertir los cambios si ocurre un error que provoca rollback.
-
-## 2. Ruta base
-
-`/api/ventas`
-
-La API recibe y devuelve datos en formato JSON.
-
-## 3. DTO de entrada: VentaRequest
-
-Campos:
-
-| Campo | Tipo | Obligatorio | Descripción |
+| Campo | Tipo | Obligatorio | Restricciones |
 |---|---|---|---|
-| idCliente | Integer | No | ID del cliente asociado. Puede ser null. |
-| porcentajeDescuento | BigDecimal | No | Descuento entre 0 y 100. Si no se envía, se utiliza 0. |
-| detalles | List | Sí | Lista de productos. Debe contener al menos un detalle. |
+| idProducto | Integer | Sí | Positivo y correspondiente a un producto existente |
+| cantidad | BigDecimal | Sí | Positiva, hasta 9 dígitos enteros y 3 decimales |
 
-Cada elemento de `detalles` utiliza `DetalleVentaRequest`.
+El cliente de la API no determina el precio ni el subtotal del detalle.
 
-### DetalleVentaRequest
+## Registro dentro de una venta
 
-| Campo | Tipo | Obligatorio | Descripción |
-|---|---|---|---|
-| idProducto | Integer | Sí | ID del producto. |
-| cantidad | BigDecimal | Sí | Cantidad solicitada, mayor que cero. |
+POST /api/ventas
 
-Los precios y los importes no se reciben desde el cliente: se calculan en el servidor.
+Content-Type: application/json
 
-## 4. Registrar una venta
-
-**POST** `/api/ventas`
-
-Encabezado:
-
-`Content-Type: application/json`
-
-### Ejemplo de solicitud
+Ejemplo, utilizando un producto existente con precioVenta 10.50:
 
 ```json
 {
-  "idCliente": null,
-  "porcentajeDescuento": 10,
+  "venta": {
+    "subtotal": 2.63,
+    "porcentajeDescuento": 0.00,
+    "montoDescuento": 0.00,
+    "total": 2.63
+  },
+  "detalles": [
+    {
+      "idProducto": 1,
+      "cantidad": 0.250
+    }
+  ]
+}
+```
+
+El ID 1 es ilustrativo: debe reemplazarse por un producto existente.
+
+La propiedad `venta` conserva el contrato existente del módulo. Los importes generales de la venta ahora se calculan automáticamente en `VentaService`, como parte de la integración con el Issue #7. No debe enviarse `idVenta` al registrar una venta nueva.
+
+Respuestas:
+
+- 200 OK: devuelve la venta registrada según el contrato existente.
+- 400 Bad Request: cuerpo ausente o ilegible, venta ausente,
+  lista de detalles nula o vacía, elementos nulos, datos de detalle
+  inválidos o importes fuera del rango admitido.
+- 404 Not Found: producto inexistente o cliente inexistente
+  cuando se haya indicado un cliente.
+
+## Cálculo y persistencia
+
+El servicio busca el producto y obtiene su precioVenta.
+El precio aplicado queda almacenado en el detalle, conservando
+su valor aunque cambie posteriormente el precio del producto.
+
+Se calcula cantidad por precio usando BigDecimal.
+Provisionalmente, el subtotal se redondea a 2 decimales con HALF_UP.
+Ejemplo: 0.250 por 10.50 produce 2.625 y se guarda como 2.63.
+
+Precio y subtotal deben ser no negativos y representables
+en DECIMAL(12,2). El precio no se redondea silenciosamente.
+Cantidad se almacena como DECIMAL(12,3), sin redondear valores
+que excedan la precisión admitida.
+
+La precisión de cantidad, la fuente del precio y el redondeo
+siguen pendientes de confirmación formal del equipo.
+
+Se conserva el comportamiento existente que permite descontar
+stock aunque el resultado sea negativo. Producto.stock continúa
+utilizando Double; no se migró su tipo en esta issue.
+
+## Consulta de detalles
+
+GET /api/ventas/{id}/detalles
+
+Respuestas:
+
+- 200 OK: lista de DetalleVentaResponse.
+- 200 OK con []: la venta existe pero no tiene detalles.
+- 404 Not Found: la venta no existe.
+
+Ejemplo de respuesta:
+
+```json
+[
+  {
+    "idDetalle": 1,
+    "idProducto": 1,
+    "nombreProducto": "Producto prueba detalle",
+    "cantidad": 0.250,
+    "precio": 10.50,
+    "subtotal": 2.63
+  }
+]
+```
+
+La respuesta utiliza DTOs. No incluye objetos JPA Venta o Producto
+anidados ni referencias circulares.
+
+## Transacción
+
+VentaService coordina el registro con @Transactional.
+Un fallo en un detalle debe revertir la venta, los detalles
+y las modificaciones de stock de esa operación.
+
+## Verificación realizada
+
+Pruebas manuales con Postman y MySQL:
+
+- Registro y consulta de un detalle válido.
+- Redondeo de 2.625 a 2.63.
+- Descuento de stock de 10 a 9.75.
+- Rechazo de cantidades cero, negativas y nulas.
+- Respuesta 404 al consultar una venta inexistente.
+- Respuesta 400 para cuerpo ausente o request vacío.
+- Fallo en el segundo producto: conteos de ventas y detalles
+  y stock sin cambios después del rechazo.
+
+Pruebas automatizadas en H2:
+
+- Registro válido, consulta, precio, subtotal y stock.
+- Rollback ante producto inexistente en el segundo renglón.
+- Rechazo de cantidades nula, cero, negativa, con exceso
+  de decimales y fuera del rango entero.
+
+Comando utilizado desde Git Bash:
+
+```bash
+./mvnw.cmd -Dspring.profiles.active=test test
+```
+
+Resultado observado: 24 pruebas, 0 fallos, 0 errores,
+0 omitidas y BUILD SUCCESS.
+Siete ejecuciones pertenecen a DetalleVentaIntegrationTest.
+
+H2 no reproduce todas las particularidades de MySQL.
+La comprobación manual del esquema y del flujo en MySQL
+complementa estas pruebas.
+
+# API REST — Ventas (Issue #7)
+
+## Descripción general
+
+El módulo de Ventas permite registrar y consultar las ventas del almacén.
+
+Cada venta puede incluir uno o varios productos y estar asociada opcionalmente a un cliente.
+
+El backend calcula automáticamente los importes de la venta, registra sus detalles y actualiza el stock de los productos.
+
+## Endpoints
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| GET | `/api/ventas` | Listar todas las ventas |
+| GET | `/api/ventas/{id}` | Buscar una venta por ID |
+| GET | `/api/ventas/{id}/detalles` | Consultar los detalles de una venta |
+| POST | `/api/ventas` | Registrar una venta |
+
+## Registrar una venta
+
+**POST** `/api/ventas`
+
+**Content-Type:** `application/json`
+
+Ejemplo de solicitud:
+
+```json
+{
+  "venta": {
+    "porcentajeDescuento": 10
+  },
   "detalles": [
     {
       "idProducto": 1,
@@ -302,250 +419,79 @@ Encabezado:
 }
 ```
 
-El ejemplo supone que los productos 1 y 2 existen.
+El cliente es opcional. Si se indica, se utiliza el identificador del cliente dentro del objeto `venta`.
 
-La venta puede registrarse aunque alguno de los productos no tenga stock suficiente.
+Los productos deben existir previamente en la base de datos.
 
-### Respuesta exitosa
+El precio de venta se obtiene desde la base de datos y no desde la solicitud.
 
-**201 Created**
+## Cálculos automáticos
 
-Ejemplo ilustrativo, suponiendo que el producto 1 cuesta $1800 y el producto 2 cuesta $1200, con stock suficiente:
+El servicio calcula:
 
-```json
-{
-  "idVenta": 1,
-  "fecha": "2026-10-22T20:00:00",
-  "idCliente": null,
-  "subtotal": 7200.00,
-  "porcentajeDescuento": 10.00,
-  "montoDescuento": 720.00,
-  "total": 6480.00,
-  "detalles": [
-    {
-      "idDetalle": 1,
-      "idProducto": 1,
-      "nombreProducto": "Arroz 1kg",
-      "cantidad": 2,
-      "precio": 1800.00,
-      "subtotal": 3600.00
-    },
-    {
-      "idDetalle": 2,
-      "idProducto": 2,
-      "nombreProducto": "Azucar 1kg",
-      "cantidad": 3,
-      "precio": 1200.00,
-      "subtotal": 3600.00
-    }
-  ],
-  "advertencias": []
-}
-```
+- **Subtotal del detalle:** cantidad × precio de venta.
+- **Subtotal de la venta:** suma de los subtotales de todos los detalles.
+- **Monto de descuento:** subtotal × porcentaje de descuento / 100.
+- **Total final:** subtotal − monto de descuento.
 
-Los identificadores y la fecha son generados por el sistema y pueden variar.
+Los importes se calculan utilizando `BigDecimal`, con redondeo `HALF_UP` a dos decimales para los subtotales y el descuento.
 
-### Venta con stock insuficiente
+El porcentaje de descuento debe estar entre 0 y 100.
 
-Cuando la cantidad solicitada supera el stock disponible, el backend registra la venta y devuelve **201 Created**.
+Si no se proporciona un porcentaje, se utiliza **0% por defecto**.
 
-El stock puede quedar negativo y la respuesta incluye una advertencia.
+Los importes generales enviados en el objeto `venta` se sustituyen por los valores calculados en el servidor.
 
-Por ejemplo, si el producto "Arroz 1kg" tiene 5 unidades y se venden 10, el stock final será -5.
+## Ejemplo de cálculo
 
-La respuesta incluirá, entre sus demás campos:
+Suponiendo los siguientes precios:
 
-```json
-{
-  "advertencias": [
-    "Advertencia: stock insuficiente para el producto Arroz 1kg. Stock anterior: 5.0, cantidad vendida: 10, stock restante: -5.0"
-  ]
-}
-```
+| Producto | Cantidad | Precio | Subtotal |
+|---|---:|---:|---:|
+| Arroz | 2 | $1.800 | $3.600 |
+| Azúcar | 3 | $1.200 | $3.600 |
 
-Este fragmento muestra únicamente el campo `advertencias`; la respuesta completa también contiene los datos de la venta y sus detalles.
+Subtotal: $7.200
 
-El frontend deberá mostrar estas advertencias al usuario.
+Descuento del 10%: $720
 
-Las advertencias se generan al registrar la venta. En las consultas posteriores mediante GET, el campo `advertencias` se devuelve como una lista vacía, porque actualmente no se almacenan las advertencias históricas.
+**Total final: $6.480**
 
-### Respuestas de error
-
-- **400 Bad Request:** datos inválidos, lista vacía, cantidad menor o igual a cero o descuento fuera del rango permitido.
-- **404 Not Found:** producto o cliente inexistente.
-
-El stock insuficiente no genera un error `409 Conflict` en el registro de ventas.
-
-## 5. Listar ventas
-
-**GET** `/api/ventas`
-
-### Respuesta
+## Respuesta exitosa
 
 **200 OK**
 
-Devuelve una lista de objetos `VentaResponse`.
+El endpoint devuelve el objeto `Venta` registrado, incluyendo sus importes calculados.
 
-Si no existen ventas, devuelve una lista vacía.
+Los detalles se pueden consultar mediante:
 
-Cada venta incluye sus datos generales, sus detalles y el campo `advertencias`, que actualmente se devuelve vacío en las consultas.
+`GET /api/ventas/{id}/detalles`
 
-## 6. Buscar venta por ID
+## Validaciones
 
-**GET** `/api/ventas/{id}`
+El servicio comprueba que:
 
-Parámetro:
+- La venta tenga al menos un detalle.
+- Cada detalle tenga un producto válido.
+- Las cantidades sean mayores que cero.
+- Los productos existan.
+- Los precios de venta sean válidos.
+- El stock esté definido.
+- El cliente exista, cuando se indique.
+- El porcentaje de descuento esté entre 0 y 100.
 
-- `id`: identificador de la venta.
+Las cantidades admiten hasta tres decimales y nueve dígitos enteros.
 
-### Respuestas
+El stock se actualiza al registrar la venta. Se conserva el comportamiento existente que permite valores negativos.
 
-- **200 OK:** devuelve la venta solicitada.
-- **404 Not Found:** la venta no existe.
+## Transacciones
 
-## 7. Consultar detalles de una venta
+El registro de ventas utiliza `@Transactional`.
 
-**GET** `/api/ventas/{id}/detalles`
+Si ocurre una excepción que provoca rollback, se revierten los cambios realizados durante la transacción, incluidos los detalles y las modificaciones de stock.
 
-### Respuestas
+## Estado de verificación
 
-- **200 OK:** devuelve los detalles asociados.
-- **404 Not Found:** la venta no existe.
+La implementación integrada requiere volver a ejecutar las pruebas automatizadas y comprobar los endpoints con el contrato actualizado.
 
-Ejemplo de respuesta:
-
-```json
-[
-  {
-    "idDetalle": 1,
-    "idProducto": 1,
-    "nombreProducto": "Arroz 1kg",
-    "cantidad": 2,
-    "precio": 1800.00,
-    "subtotal": 3600.00
-  }
-]
-```
-
-## 8. Reglas de cálculo
-
-Los cálculos monetarios se realizan utilizando `BigDecimal`.
-
-### Subtotal de cada detalle
-
-`cantidad * precioVenta`
-
-El resultado se redondea a dos decimales utilizando `RoundingMode.HALF_UP`.
-
-### Subtotal de la venta
-
-Suma de los subtotales de todos los detalles.
-
-### Monto de descuento
-
-`subtotalVenta * porcentajeDescuento / 100`
-
-Se redondea a dos decimales con `HALF_UP`.
-
-### Total final
-
-`total = subtotalVenta - montoDescuento`
-
-Se expresa con dos decimales utilizando `HALF_UP`.
-
-El porcentaje de descuento debe estar entre 0 y 100, inclusive.
-
-Si no se proporciona un descuento, se utiliza 0.
-
-## 9. Validaciones
-
-Antes de completar el registro, el sistema verifica:
-
-- Que la venta tenga al menos un detalle.
-- Que cada detalle indique un producto.
-- Que la cantidad sea mayor que cero.
-- Que el producto exista.
-- Que el producto tenga un valor de stock definido.
-- Que el precio de venta sea válido.
-- Que el cliente exista, si se indicó uno.
-- Que el descuento esté entre 0 y 100.
-
-El stock insuficiente no impide registrar una venta. En ese caso se genera una advertencia.
-
-Si ocurre un error que provoca rollback, la transacción revierte las modificaciones realizadas.
-
-## 10. Transacciones y stock
-
-El método de registro utiliza `@Transactional`.
-
-Dentro de la transacción se realizan las operaciones necesarias para registrar la venta y actualizar el stock.
-
-Si ocurre una excepción que provoca rollback, se revierten las modificaciones realizadas.
-
-Se verificó mediante pruebas de integración que:
-
-- Una venta exitosa guarda la venta y sus detalles.
-- El stock se actualiza correctamente.
-- Una venta con stock insuficiente se registra y puede dejar stock negativo.
-- Cuando el stock queda negativo, se genera una advertencia.
-- Si el mismo producto aparece repetido, se descuentan las cantidades de ambos detalles.
-- Cuando la cantidad acumulada supera el stock, la venta se registra y se conserva el stock negativo resultante.
-
-### Limitación conocida
-
-No se ha implementado ni verificado todavía un mecanismo específico para impedir conflictos entre ventas simultáneas.
-
-Esta mejora queda pendiente.
-
-## 11. Estado de verificación
-
-### Pruebas manuales con Postman
-
-En las verificaciones manuales anteriores se habían probado los siguientes casos:
-
-- POST exitoso: 201 Created.
-- Producto inexistente: 404 Not Found.
-- Cliente inexistente: 404 Not Found.
-- Cantidad cero: 400 Bad Request.
-- Lista de detalles vacía: 400 Bad Request.
-- Consultas GET de ventas y detalles.
-
-**Pendiente de volver a comprobar manualmente:** el registro de una venta con stock insuficiente, que ahora debe devolver `201 Created` junto con una advertencia.
-
-### Pruebas automatizadas
-
-`VentaServiceTest`
-
-- 7 pruebas unitarias aprobadas.
-- Incluye el registro de ventas con stock insuficiente y advertencias.
-
-`VentaIntegracionTest`
-
-- 3 pruebas de integración aprobadas.
-- Verifica stock negativo, advertencias y productos repetidos.
-- Utiliza una base de datos H2 en memoria, sin modificar los datos de MySQL.
-
-`AlmacenApplicationTests`
-
-- 2 pruebas aprobadas.
-- Verificada la conexión a H2.
-
-También se ejecutaron correctamente las pruebas de Productos:
-
-- `ProductoControllerTest`: 8 pruebas.
-- `ProductoServiceTest`: 8 pruebas.
-
-### Estado actual
-
-Se ejecutó la suite completa mediante:
-
-`.\mvnw.cmd clean test`
-
-**Resultado: BUILD SUCCESS**
-
-- 28 pruebas ejecutadas.
-- 0 fallidas.
-- 0 errores.
-- 0 omitidas.
-
-Queda pendiente verificar manualmente la nueva respuesta de stock insuficiente mediante Postman, preparar el commit y subir los cambios a la rama `feature/backend-ventas` para actualizar el Pull Request correspondiente al Issue #7.
+Las pruebas de la implementación anterior deben adaptarse a la estructura de `VentaRequest` y a los métodos actuales de `VentaService`.

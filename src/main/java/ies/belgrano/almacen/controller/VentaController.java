@@ -1,19 +1,13 @@
-
 package ies.belgrano.almacen.controller;
 
-import ies.belgrano.almacen.dto.DetalleVentaResponse;
 import ies.belgrano.almacen.dto.VentaRequest;
-import ies.belgrano.almacen.dto.VentaResponse;
+import ies.belgrano.almacen.model.Venta;
 import ies.belgrano.almacen.service.VentaService;
-
-import jakarta.validation.Valid;
-
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
+import jakarta.validation.Valid;
 import java.util.List;
-
+import ies.belgrano.almacen.dto.DetalleVentaResponse;
 @RestController
 @RequestMapping("/api/ventas")
 public class VentaController {
@@ -24,44 +18,54 @@ public class VentaController {
         this.ventaService = ventaService;
     }
 
-    // Obtener todas las ventas
+
+    // ==================================================
+    // LISTAR TODAS LAS VENTAS
+    // ==================================================
+
     @GetMapping
-    public ResponseEntity<List<VentaResponse>> listarVentas() {
-
-        List<VentaResponse> ventas = ventaService.listarTodas();
-
-        return ResponseEntity.ok(ventas);
+    public List<Venta> listarTodas() {
+        return ventaService.listarTodas();
     }
 
-    // Obtener una venta por su ID
+
+    // ==================================================
+    // BUSCAR VENTA POR ID
+    // ==================================================
+
     @GetMapping("/{id}")
-    public ResponseEntity<VentaResponse> obtenerVenta(
-            @PathVariable Integer id) {
+    public ResponseEntity<Venta> buscarPorId(
+            @PathVariable Integer id
+    ) {
 
         return ventaService.buscarPorId(id)
                 .map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.notFound().build());
+                .orElse(ResponseEntity.notFound().build());
     }
 
-    // Obtener los detalles de una venta
+
+    // ==================================================
+    // LISTAR DETALLES DE UNA VENTA
+    // ==================================================
+
     @GetMapping("/{id}/detalles")
-    public ResponseEntity<List<DetalleVentaResponse>> obtenerDetalles(
+    public List<DetalleVentaResponse> listarDetalles(
             @PathVariable Integer id) {
 
-        List<DetalleVentaResponse> detalles = ventaService.listarDetalles(id);
-
-        return ResponseEntity.ok(detalles);
+        return ventaService.listarDetalles(id);
     }
 
-    // Registrar una nueva venta
+
+    // ==================================================
+    // REGISTRAR UNA VENTA
+    // ==================================================
+
     @PostMapping
-    public ResponseEntity<VentaResponse> registrarVenta(
-            @Valid @RequestBody VentaRequest request) {
-
-        VentaResponse ventaGuardada = ventaService.registrarVenta(request);
-
-        return ResponseEntity
-                .status(HttpStatus.CREATED)
-                .body(ventaGuardada);
+    public ResponseEntity<Venta> registrarVenta(@Valid @RequestBody VentaRequest request) {
+        Venta ventaGuardada =
+                ventaService.registrarVenta(
+                        request.getVenta(),
+                        request.getDetalles());
+        return ResponseEntity.ok(ventaGuardada);
     }
 }

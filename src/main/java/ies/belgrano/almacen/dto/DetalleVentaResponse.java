@@ -1,65 +1,53 @@
-
 package ies.belgrano.almacen.dto;
 
 import java.math.BigDecimal;
 
 public class DetalleVentaResponse {
 
-    private Integer idDetalle;
-    private Integer idProducto;
-    private String nombreProducto;
-    private BigDecimal cantidad;
-    private BigDecimal precio;
-    private BigDecimal subtotal;
+    private final Integer idDetalle;
+    private final Integer idProducto;
+    private final String nombreProducto;
+    private final BigDecimal cantidad;
+    private final BigDecimal precio;
+    private final BigDecimal subtotal;
 
-    public DetalleVentaResponse() {
+    public DetalleVentaResponse(
+            Integer idDetalle,
+            Integer idProducto,
+            String nombreProducto,
+            BigDecimal cantidad,
+            BigDecimal precio,
+            BigDecimal subtotal) {
+
+        this.idDetalle = idDetalle;
+        this.idProducto = idProducto;
+        this.nombreProducto = nombreProducto;
+        this.cantidad = cantidad;
+        this.precio = precio;
+        this.subtotal = subtotal;
     }
 
     public Integer getIdDetalle() {
         return idDetalle;
     }
 
-    public void setIdDetalle(Integer idDetalle) {
-        this.idDetalle = idDetalle;
-    }
-
     public Integer getIdProducto() {
         return idProducto;
-    }
-
-    public void setIdProducto(Integer idProducto) {
-        this.idProducto = idProducto;
     }
 
     public String getNombreProducto() {
         return nombreProducto;
     }
 
-    public void setNombreProducto(String nombreProducto) {
-        this.nombreProducto = nombreProducto;
-    }
-
     public BigDecimal getCantidad() {
         return cantidad;
-    }
-
-    public void setCantidad(BigDecimal cantidad) {
-        this.cantidad = cantidad;
     }
 
     public BigDecimal getPrecio() {
         return precio;
     }
 
-    public void setPrecio(BigDecimal precio) {
-        this.precio = precio;
-    }
-
     public BigDecimal getSubtotal() {
         return subtotal;
-    }
-
-    public void setSubtotal(BigDecimal subtotal) {
-        this.subtotal = subtotal;
     }
 }

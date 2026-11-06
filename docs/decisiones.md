@@ -83,73 +83,125 @@ Antes de cerrar la implementación, confirmar con el equipo:
 Esta documentación corresponde a la Issue #5, CRUD de Productos.
 
 No se incorporan nuevas entidades, paginación, búsqueda ni modificaciones al módulo de Ventas.
+## Detalles de venta — precisión propuesta para la issue #8
+
+Se propone admitir cantidades positivas con hasta 9 dígitos
+enteros y 3 decimales, para permitir ventas de productos por peso.
+
+Esta restricción se incorporó en DetalleVentaRequest mediante
+@NotNull, @Positive y @Digits(integer = 9, fraction = 3).
+
+La precisión todavía está pendiente de confirmación del equipo.
+También falta alinear la entidad y el servicio con esta propuesta
+y coordinarla con el stock de Producto, que actualmente usa Double.
+
+Esta decisión no define todavía la política de redondeo
+de los importes.
+### Importes del detalle — propuesta pendiente de confirmación
+
+Se implementa provisionalmente la obtención del precio desde
+Producto.precioVenta. Ese valor se almacena en DetalleVenta.precio
+como precio aplicado al momento de la venta.
+
+El subtotal se calcula en el backend mediante cantidad por precio,
+usando BigDecimal y redondeando a 2 decimales con HALF_UP.
+
+Precio y subtotal deben ser no negativos y representables en
+DECIMAL(12,2). El precio no se redondea silenciosamente.
+
+La fuente del precio y el modo de redondeo siguen pendientes
+de confirmación del equipo.
 
 
-Decisiones del módulo de Ventas – Issue #7
+---
 
-Decisión 03: Política de descuentos y redondeo
+# Decisiones del módulo de Ventas — Issue #7
 
-Contexto
+## Decisión 03: Política de descuentos y cálculos
 
-El módulo Ventas debe calcular los importes de cada operación desde el backend, utilizando los precios vigentes de los productos y evitando confiar en precios o totales enviados por el cliente.
+### Contexto
 
-Implementación actual
+El módulo de Ventas debe calcular los importes de cada operación desde el backend, utilizando los precios registrados de los productos y evitando confiar en los importes enviados por el cliente.
 
-Descuento opcional: Se admite un porcentaje de descuento entre 0 % y 100 %, inclusive.
+### Implementación
 
-Descuento predeterminado: Cuando no se informa un porcentaje, se utiliza 0 %.
+- El porcentaje de descuento es opcional.
+- Se permiten descuentos entre 0% y 100%, inclusive.
+- Si no se proporciona un porcentaje, se utiliza 0%.
+- Los precios se obtienen desde `Producto.precioVenta`.
+- Los cálculos se realizan mediante `BigDecimal`.
+- El subtotal de cada detalle se calcula multiplicando cantidad por precio.
+- El subtotal de la venta es la suma de sus detalles.
+- El monto de descuento se calcula aplicando el porcentaje al subtotal.
+- El total final se obtiene restando el descuento al subtotal.
+- Los importes se expresan con dos decimales, utilizando `RoundingMode.HALF_UP` para los cálculos que requieren redondeo.
 
-Cálculo de importes: Se utiliza BigDecimal para calcular subtotales, descuento y total.
+### Estado
 
-Redondeo: Se utiliza RoundingMode.HALF_UP a dos decimales.
+Implementado en `VentaService`. Pendiente de ejecutar nuevamente las pruebas de la integración.
 
-Precio de venta: Se obtiene desde la entidad Producto, no desde la solicitud del cliente.
+La autorización para establecer descuentos sigue pendiente de confirmación con el equipo.
 
-Estado: Implementado y probado. Pendiente de confirmación con el equipo respecto de quién puede establecer el porcentaje de descuento y si esta política es la acordada.
+## Decisión 04: Cantidades y control de stock
 
-### Decisión 04: Cantidades y control de stock
+### Contexto
 
-**Contexto**
+El módulo Productos utiliza `Double` para representar el stock, mientras que los detalles de Ventas utilizan `BigDecimal` para las cantidades.
 
-El módulo Productos representa el stock mediante `Double`, mientras que los detalles de Ventas utilizan `BigDecimal` para las cantidades.
+El sistema permite vender productos en cantidades fraccionarias.
 
-El sistema admite productos vendidos en cantidades fraccionarias.
+### Implementación
 
-Se acordó permitir el registro de ventas incluso cuando la cantidad solicitada supera el stock disponible, informando una advertencia sin impedir la operación.
+- Las cantidades deben ser positivas.
+- Se admiten hasta nueve dígitos enteros y tres decimales.
+- El producto debe existir.
+- El precio de venta debe ser válido.
+- El stock del producto debe estar definido.
+- El stock se descuenta al registrar cada detalle.
+- Se conserva el comportamiento que permite registrar ventas aunque el stock resultante sea negativo.
+- No se incluyen advertencias de stock en la respuesta de la API.
+- El registro de ventas y detalles utiliza `@Transactional`.
+- Si ocurre una excepción que provoca rollback, se revierten los cambios realizados en la operación.
 
-**Implementación actual**
+### Pendiente
 
-- Cada cantidad solicitada debe ser mayor que cero.
-- El producto debe existir y tener un valor de stock definido.
-- El sistema permite registrar una venta aunque la cantidad solicitada supere el stock disponible.
-- Cuando el stock resulta insuficiente, la venta se registra igualmente y el stock puede quedar negativo.
-- En estos casos, el backend devuelve una advertencia en el campo `advertencias` de la respuesta de la venta, indicando el producto, el stock anterior, la cantidad vendida y el stock restante.
-- Cuando un producto aparece repetido en una misma venta, se descuentan las cantidades de cada detalle y se genera una advertencia si el stock queda negativo.
-- La venta, sus detalles y las modificaciones del stock se procesan mediante una transacción.
-- Si ocurre un error que provoca rollback, se revierten las modificaciones realizadas.
+- Confirmar con el equipo la política definitiva sobre stock negativo.
+- Evaluar mecanismos de protección ante ventas simultáneas.
+- Confirmar la política de conversión entre `BigDecimal` y `Double`.
 
-**Estado:** Implementado y probado mediante pruebas unitarias y de integración. Las 28 pruebas automatizadas finalizaron correctamente.
+## Decisión 05: Cliente opcional en Ventas
 
-**Pendiente:**
+### Contexto
 
-- Acordar la cantidad máxima de decimales permitidos en las cantidades y la política de conversión entre `BigDecimal` y `Double`.
-- Evaluar la protección del stock ante ventas simultáneas.
-- Integrar en el frontend la visualización de las advertencias devueltas por el backend.
+Una venta puede registrarse sin estar asociada a un cliente.
 
-Decisión 05: Cliente opcional en Ventas
+### Implementación
 
-Contexto
+- El cliente es opcional.
+- Su identificador se envía dentro del objeto `venta`.
+- Si no se proporciona un cliente, la venta se registra sin asociación.
+- Si se proporciona un identificador, el servicio comprueba que el cliente exista.
+- Si el cliente no existe, se lanza `ResourceNotFoundException`.
 
-La Issue #7 establece que una venta puede registrarse sin asociarla a un cliente.
+### Estado
 
-Implementación actual
+Implementado en `VentaService`, pendiente de verificar mediante las pruebas de integración.
 
-El campo idCliente es opcional.
+## Decisión 06: Compatibilidad con el contrato de main
 
-Si no se proporciona, la venta se registra sin cliente asociado.
+### Contexto
 
-Si se proporciona, el sistema verifica que el cliente exista.
+La integración del Issue #7 debe conservar la estructura de los controladores y DTO existentes en `main`.
 
-Si el cliente no existe, se devuelve HTTP 404 Not Found.
+### Decisión
 
-Estado: Implementado y probado, de acuerdo con el contrato actual de la Issue #7.
+- Se mantiene `VentaController` con los endpoints existentes.
+- Se conserva `VentaRequest`, compuesto por un objeto `venta` y una lista `detalles`.
+- Se mantiene `DetalleVentaRequest` con sus validaciones de cantidad y producto.
+- Se mantiene `DetalleVentaResponse` para consultar los detalles de una venta.
+- Se integra el cálculo automático de los importes en `VentaService`.
+- No se agregan operaciones independientes de creación, actualización o eliminación de detalles.
+
+### Estado
+
+Integración de código realizada. Pruebas automatizadas pendientes de ejecución.

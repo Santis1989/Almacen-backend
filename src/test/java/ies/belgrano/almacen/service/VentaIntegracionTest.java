@@ -2,17 +2,13 @@
 package ies.belgrano.almacen.service;
 
 import ies.belgrano.almacen.dto.DetalleVentaRequest;
-import ies.belgrano.almacen.dto.VentaRequest;
-import ies.belgrano.almacen.dto.VentaResponse;
-
 import ies.belgrano.almacen.model.Producto;
-
+import ies.belgrano.almacen.model.Venta;
 import ies.belgrano.almacen.repository.ProductoRepository;
 import ies.belgrano.almacen.repository.VentaRepository;
 import ies.belgrano.almacen.repository.DetalleVentaRepository;
 
 import org.junit.jupiter.api.Test;
-
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
@@ -38,67 +34,50 @@ class VentaIntegracionTest {
         @Autowired
         private DetalleVentaRepository detalleVentaRepository;
 
-        // =====================================================
-        // PRUEBA 1: VENTA CON STOCK INSUFICIENTE
-        // La venta debe registrarse y dejar stock negativo.
-        // =====================================================
-
+        // PRUEBA 1:
+        // Permitir una venta que deja stock negativo.
         @Test
-        void registrarVenta_stockInsuficientePermiteVentaConAdvertencia() {
+        void registrarVenta_stockInsuficientePermiteVenta() {
 
                 long ventasAntes = ventaRepository.count();
                 long detallesAntes = detalleVentaRepository.count();
 
-                Producto arroz = new Producto();
-                arroz.setNombre("Arroz stock insuficiente");
-                arroz.setPrecioVenta(new BigDecimal("1800.00"));
-                arroz.setStock(10.0);
-                arroz = productoRepository.save(arroz);
+                Producto arroz = crearProducto(
+                                "Arroz stock insuficiente", "1800.00", 10.0);
 
-                Producto azucar = new Producto();
-                azucar.setNombre("Azucar stock insuficiente");
-                azucar.setPrecioVenta(new BigDecimal("1200.00"));
-                azucar.setStock(5.0);
-                azucar = productoRepository.save(azucar);
+                Producto azucar = crearProducto(
+                                "Azucar stock insuficiente", "1200.00", 5.0);
 
-                DetalleVentaRequest detalleArroz = new DetalleVentaRequest();
-                detalleArroz.setIdProducto(arroz.getIdProducto());
-                detalleArroz.setCantidad(new BigDecimal("2"));
+                DetalleVentaRequest detalleArroz = crearDetalle(
+                                arroz.getIdProducto(), "2");
 
-                DetalleVentaRequest detalleAzucar = new DetalleVentaRequest();
-                detalleAzucar.setIdProducto(azucar.getIdProducto());
-                detalleAzucar.setCantidad(new BigDecimal("10"));
+                DetalleVentaRequest detalleAzucar = crearDetalle(
+                                azucar.getIdProducto(), "10");
 
-                VentaRequest request = new VentaRequest();
-                request.setIdCliente(null);
-                request.setPorcentajeDescuento(BigDecimal.ZERO);
-                request.setDetalles(List.of(detalleArroz, detalleAzucar));
+                Venta venta = new Venta();
+                venta.setPorcentajeDescuento(BigDecimal.ZERO);
 
-                // La venta debe completarse, sin lanzar excepción.
-                VentaResponse respuesta = ventaService.registrarVenta(request);
+                Venta respuesta = ventaService.registrarVenta(
+                                venta,
+                                List.of(detalleArroz, detalleAzucar));
 
                 assertNotNull(respuesta);
                 assertNotNull(respuesta.getIdVenta());
 
-                // 2 arroces x 1800 + 10 azúcares x 1200 = 15600.
+                // 2 x 1800 + 10 x 1200 = 15600.
+                assertImporte("15600.00", respuesta.getSubtotal());
+                assertImporte("15600.00", respuesta.getTotal());
+
+                // Los dos detalles deben estar guardados.
                 assertEquals(
-                                0,
-                                new BigDecimal("15600.00")
-                                                .compareTo(respuesta.getTotal()));
+                                detallesAntes + 2,
+                                detalleVentaRepository.count());
 
-                // Se deben guardar los dos detalles.
-                assertNotNull(respuesta.getDetalles());
-                assertEquals(2, respuesta.getDetalles().size());
+                assertEquals(
+                                2,
+                                ventaService.listarDetalles(
+                                                respuesta.getIdVenta()).size());
 
-                // Debe generarse una advertencia para el azúcar.
-                assertNotNull(respuesta.getAdvertencias());
-                assertEquals(1, respuesta.getAdvertencias().size());
-
-                assertTrue(
-                                respuesta.getAdvertencias().get(0)
-                                                .contains("Azucar stock insuficiente"));
-
-                // Comprobar los valores finales en la base de datos.
                 Producto arrozDespues = productoRepository
                                 .findById(arroz.getIdProducto())
                                 .orElseThrow();
@@ -110,76 +89,52 @@ class VentaIntegracionTest {
                 assertEquals(8.0, arrozDespues.getStock());
                 assertEquals(-5.0, azucarDespues.getStock());
 
-                // La venta y sus detalles deben estar guardados.
                 assertEquals(ventasAntes + 1, ventaRepository.count());
-                assertEquals(detallesAntes + 2, detalleVentaRepository.count());
 
                 assertTrue(
-                                ventaRepository.existsById(respuesta.getIdVenta()));
+                                ventaRepository.existsById(
+                                                respuesta.getIdVenta()));
         }
 
-        // =====================================================
-        // PRUEBA 2: REGISTRO EXITOSO DE UNA VENTA
-        // Cuando alcanza el stock, no debe haber advertencias.
-        // =====================================================
-
+        // PRUEBA 2:
+        // Registrar una venta con descuento del 10%.
         @Test
         void registrarVenta_exitosaGuardaDetallesYActualizaStock() {
 
                 long ventasAntes = ventaRepository.count();
                 long detallesAntes = detalleVentaRepository.count();
 
-                Producto arroz = new Producto();
-                arroz.setNombre("Arroz venta exitosa");
-                arroz.setPrecioVenta(new BigDecimal("1800.00"));
-                arroz.setStock(10.0);
-                arroz = productoRepository.save(arroz);
+                Producto arroz = crearProducto(
+                                "Arroz venta exitosa", "1800.00", 10.0);
 
-                Producto azucar = new Producto();
-                azucar.setNombre("Azucar venta exitosa");
-                azucar.setPrecioVenta(new BigDecimal("1200.00"));
-                azucar.setStock(8.0);
-                azucar = productoRepository.save(azucar);
+                Producto azucar = crearProducto(
+                                "Azucar venta exitosa", "1200.00", 8.0);
 
-                DetalleVentaRequest detalleArroz = new DetalleVentaRequest();
-                detalleArroz.setIdProducto(arroz.getIdProducto());
-                detalleArroz.setCantidad(new BigDecimal("2"));
+                DetalleVentaRequest detalleArroz = crearDetalle(
+                                arroz.getIdProducto(), "2");
 
-                DetalleVentaRequest detalleAzucar = new DetalleVentaRequest();
-                detalleAzucar.setIdProducto(azucar.getIdProducto());
-                detalleAzucar.setCantidad(new BigDecimal("3"));
+                DetalleVentaRequest detalleAzucar = crearDetalle(
+                                azucar.getIdProducto(), "3");
 
-                VentaRequest request = new VentaRequest();
-                request.setIdCliente(null);
-                request.setPorcentajeDescuento(new BigDecimal("10"));
-                request.setDetalles(List.of(detalleArroz, detalleAzucar));
+                Venta venta = new Venta();
+                venta.setPorcentajeDescuento(new BigDecimal("10"));
 
-                VentaResponse respuesta = ventaService.registrarVenta(request);
+                Venta respuesta = ventaService.registrarVenta(
+                                venta,
+                                List.of(detalleArroz, detalleAzucar));
 
                 assertNotNull(respuesta);
                 assertNotNull(respuesta.getIdVenta());
 
-                assertEquals(
-                                0,
-                                new BigDecimal("7200.00")
-                                                .compareTo(respuesta.getSubtotal()));
+                assertImporte("7200.00", respuesta.getSubtotal());
+                assertImporte("10.00", respuesta.getPorcentajeDescuento());
+                assertImporte("720.00", respuesta.getMontoDescuento());
+                assertImporte("6480.00", respuesta.getTotal());
 
                 assertEquals(
-                                0,
-                                new BigDecimal("720.00")
-                                                .compareTo(respuesta.getMontoDescuento()));
-
-                assertEquals(
-                                0,
-                                new BigDecimal("6480.00")
-                                                .compareTo(respuesta.getTotal()));
-
-                assertNotNull(respuesta.getDetalles());
-                assertEquals(2, respuesta.getDetalles().size());
-
-                // No debe haber advertencias.
-                assertNotNull(respuesta.getAdvertencias());
-                assertTrue(respuesta.getAdvertencias().isEmpty());
+                                2,
+                                ventaService.listarDetalles(
+                                                respuesta.getIdVenta()).size());
 
                 Producto arrozDespues = productoRepository
                                 .findById(arroz.getIdProducto())
@@ -198,77 +153,99 @@ class VentaIntegracionTest {
                                 detalleVentaRepository.count());
 
                 assertTrue(
-                                ventaRepository.existsById(respuesta.getIdVenta()));
+                                ventaRepository.existsById(
+                                                respuesta.getIdVenta()));
         }
 
-        // =====================================================
-        // PRUEBA 3: MISMO PRODUCTO REPETIDO
-        // Se deben descontar ambas cantidades.
-        // =====================================================
-
+        // PRUEBA 3:
+        // Descontar dos veces el mismo producto.
         @Test
         void registrarVenta_productoRepetidoPermiteStockNegativo() {
 
                 long ventasAntes = ventaRepository.count();
                 long detallesAntes = detalleVentaRepository.count();
 
-                Producto arroz = new Producto();
-                arroz.setNombre("Arroz producto repetido");
-                arroz.setPrecioVenta(new BigDecimal("1800.00"));
-                arroz.setStock(10.0);
-                arroz = productoRepository.save(arroz);
+                Producto arroz = crearProducto(
+                                "Arroz producto repetido", "1800.00", 10.0);
 
-                // Primer detalle: 7 unidades.
-                DetalleVentaRequest primerDetalle = new DetalleVentaRequest();
-                primerDetalle.setIdProducto(arroz.getIdProducto());
-                primerDetalle.setCantidad(new BigDecimal("7"));
+                DetalleVentaRequest primerDetalle = crearDetalle(
+                                arroz.getIdProducto(), "7");
 
-                // Segundo detalle: 6 unidades del mismo producto.
-                DetalleVentaRequest segundoDetalle = new DetalleVentaRequest();
-                segundoDetalle.setIdProducto(arroz.getIdProducto());
-                segundoDetalle.setCantidad(new BigDecimal("6"));
+                DetalleVentaRequest segundoDetalle = crearDetalle(
+                                arroz.getIdProducto(), "6");
 
-                // Total vendido: 13 unidades.
-                // Stock inicial: 10 unidades.
-                // Stock final esperado: -3 unidades.
+                Venta venta = new Venta();
+                venta.setPorcentajeDescuento(BigDecimal.ZERO);
 
-                VentaRequest request = new VentaRequest();
-                request.setIdCliente(null);
-                request.setPorcentajeDescuento(BigDecimal.ZERO);
-                request.setDetalles(List.of(primerDetalle, segundoDetalle));
-
-                VentaResponse respuesta = ventaService.registrarVenta(request);
+                Venta respuesta = ventaService.registrarVenta(
+                                venta,
+                                List.of(primerDetalle, segundoDetalle));
 
                 assertNotNull(respuesta);
                 assertNotNull(respuesta.getIdVenta());
 
-                // 13 x 1800 = 23400.
+                // 13 unidades x 1800 = 23400.
+                assertImporte("23400.00", respuesta.getSubtotal());
+                assertImporte("23400.00", respuesta.getTotal());
+
                 assertEquals(
-                                0,
-                                new BigDecimal("23400.00")
-                                                .compareTo(respuesta.getTotal()));
-
-                assertNotNull(respuesta.getDetalles());
-                assertEquals(2, respuesta.getDetalles().size());
-
-                // El segundo detalle deja el stock negativo.
-                assertNotNull(respuesta.getAdvertencias());
-                assertEquals(1, respuesta.getAdvertencias().size());
-
-                assertTrue(
-                                respuesta.getAdvertencias().get(0)
-                                                .contains("Arroz producto repetido"));
+                                2,
+                                ventaService.listarDetalles(
+                                                respuesta.getIdVenta()).size());
 
                 Producto arrozDespues = productoRepository
                                 .findById(arroz.getIdProducto())
                                 .orElseThrow();
 
+                // Stock inicial: 10.
+                // Cantidad vendida: 7 + 6 = 13.
+                // Stock final: -3.
                 assertEquals(-3.0, arrozDespues.getStock());
 
                 assertEquals(ventasAntes + 1, ventaRepository.count());
-                assertEquals(detallesAntes + 2, detalleVentaRepository.count());
+                assertEquals(
+                                detallesAntes + 2,
+                                detalleVentaRepository.count());
 
                 assertTrue(
-                                ventaRepository.existsById(respuesta.getIdVenta()));
+                                ventaRepository.existsById(
+                                                respuesta.getIdVenta()));
+        }
+
+        // MÉTODOS AUXILIARES
+
+        private Producto crearProducto(
+                        String nombre,
+                        String precio,
+                        Double stock) {
+
+                Producto producto = new Producto();
+                producto.setNombre(nombre);
+                producto.setPrecioVenta(new BigDecimal(precio));
+                producto.setStock(stock);
+
+                return productoRepository.save(producto);
+        }
+
+        private DetalleVentaRequest crearDetalle(
+                        Integer idProducto,
+                        String cantidad) {
+
+                DetalleVentaRequest detalle = new DetalleVentaRequest();
+                detalle.setIdProducto(idProducto);
+                detalle.setCantidad(new BigDecimal(cantidad));
+
+                return detalle;
+        }
+
+        private void assertImporte(
+                        String esperado,
+                        BigDecimal obtenido) {
+
+                assertNotNull(obtenido);
+
+                assertEquals(
+                                0,
+                                new BigDecimal(esperado).compareTo(obtenido));
         }
 }
