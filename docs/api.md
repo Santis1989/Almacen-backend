@@ -273,10 +273,7 @@ Ejemplo, utilizando un producto existente con precioVenta 10.50:
 
 El ID 1 es ilustrativo: debe reemplazarse por un producto existente.
 
-La propiedad venta conserva el contrato existente del módulo.
-Actualmente sus importes generales se reciben en la petición;
-esta issue no implementa el cálculo general de descuentos y totales.
-No debe enviarse idVenta al registrar una venta nueva.
+La propiedad `venta` conserva el contrato existente del módulo. Los importes generales de la venta ahora se calculan automáticamente en `VentaService`, como parte de la integración con el Issue #7. No debe enviarse `idVenta` al registrar una venta nueva.
 
 Respuestas:
 
@@ -376,3 +373,125 @@ Siete ejecuciones pertenecen a DetalleVentaIntegrationTest.
 H2 no reproduce todas las particularidades de MySQL.
 La comprobación manual del esquema y del flujo en MySQL
 complementa estas pruebas.
+
+# API REST — Ventas (Issue #7)
+
+## Descripción general
+
+El módulo de Ventas permite registrar y consultar las ventas del almacén.
+
+Cada venta puede incluir uno o varios productos y estar asociada opcionalmente a un cliente.
+
+El backend calcula automáticamente los importes de la venta, registra sus detalles y actualiza el stock de los productos.
+
+## Endpoints
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| GET | `/api/ventas` | Listar todas las ventas |
+| GET | `/api/ventas/{id}` | Buscar una venta por ID |
+| GET | `/api/ventas/{id}/detalles` | Consultar los detalles de una venta |
+| POST | `/api/ventas` | Registrar una venta |
+
+## Registrar una venta
+
+**POST** `/api/ventas`
+
+**Content-Type:** `application/json`
+
+Ejemplo de solicitud:
+
+```json
+{
+  "venta": {
+    "porcentajeDescuento": 10
+  },
+  "detalles": [
+    {
+      "idProducto": 1,
+      "cantidad": 2
+    },
+    {
+      "idProducto": 2,
+      "cantidad": 3
+    }
+  ]
+}
+```
+
+El cliente es opcional. Si se indica, se utiliza el identificador del cliente dentro del objeto `venta`.
+
+Los productos deben existir previamente en la base de datos.
+
+El precio de venta se obtiene desde la base de datos y no desde la solicitud.
+
+## Cálculos automáticos
+
+El servicio calcula:
+
+- **Subtotal del detalle:** cantidad × precio de venta.
+- **Subtotal de la venta:** suma de los subtotales de todos los detalles.
+- **Monto de descuento:** subtotal × porcentaje de descuento / 100.
+- **Total final:** subtotal − monto de descuento.
+
+Los importes se calculan utilizando `BigDecimal`, con redondeo `HALF_UP` a dos decimales para los subtotales y el descuento.
+
+El porcentaje de descuento debe estar entre 0 y 100.
+
+Si no se proporciona un porcentaje, se utiliza **0% por defecto**.
+
+Los importes generales enviados en el objeto `venta` se sustituyen por los valores calculados en el servidor.
+
+## Ejemplo de cálculo
+
+Suponiendo los siguientes precios:
+
+| Producto | Cantidad | Precio | Subtotal |
+|---|---:|---:|---:|
+| Arroz | 2 | $1.800 | $3.600 |
+| Azúcar | 3 | $1.200 | $3.600 |
+
+Subtotal: $7.200
+
+Descuento del 10%: $720
+
+**Total final: $6.480**
+
+## Respuesta exitosa
+
+**200 OK**
+
+El endpoint devuelve el objeto `Venta` registrado, incluyendo sus importes calculados.
+
+Los detalles se pueden consultar mediante:
+
+`GET /api/ventas/{id}/detalles`
+
+## Validaciones
+
+El servicio comprueba que:
+
+- La venta tenga al menos un detalle.
+- Cada detalle tenga un producto válido.
+- Las cantidades sean mayores que cero.
+- Los productos existan.
+- Los precios de venta sean válidos.
+- El stock esté definido.
+- El cliente exista, cuando se indique.
+- El porcentaje de descuento esté entre 0 y 100.
+
+Las cantidades admiten hasta tres decimales y nueve dígitos enteros.
+
+El stock se actualiza al registrar la venta. Se conserva el comportamiento existente que permite valores negativos.
+
+## Transacciones
+
+El registro de ventas utiliza `@Transactional`.
+
+Si ocurre una excepción que provoca rollback, se revierten los cambios realizados durante la transacción, incluidos los detalles y las modificaciones de stock.
+
+## Estado de verificación
+
+La implementación integrada requiere volver a ejecutar las pruebas automatizadas y comprobar los endpoints con el contrato actualizado.
+
+Las pruebas de la implementación anterior deben adaptarse a la estructura de `VentaRequest` y a los métodos actuales de `VentaService`.
